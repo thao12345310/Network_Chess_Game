@@ -3,7 +3,20 @@
 
 #include <string>
 #include <functional>
-#include <json/json.h> // hoặc nlohmann/json
+#include <jsoncpp/json/json.h>
+
+// Socket headers - Windows/Linux compatibility
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #pragma comment(lib, "ws2_32.lib")
+#else
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <unistd.h>
+    #define closesocket close
+#endif
 
 class NetworkClient {
 private:
@@ -29,6 +42,11 @@ public:
     // Helper
     std::string getSessionToken() const;
     void setSessionToken(const std::string& token);
+
+private:
+    // Private helper methods
+    bool sendRaw(const std::string& data);
+    std::string receiveRaw();
 };
 
 #endif

@@ -7,6 +7,7 @@
 #include <thread>
 #include <functional>
 #include <atomic>
+#include <jsoncpp/json/json.h>   // THÊM DÒNG NÀY
 
 using MessageCallback = std::function<void(const Json::Value&)>;
 using ErrorCallback = std::function<void(const std::string&)>;

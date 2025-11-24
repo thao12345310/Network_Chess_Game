@@ -1,0 +1,10 @@
+# Chess Game Logic Server - Python Dependencies
+
+# Chess engine library for move validation and game rules
+chess==1.10.0
+
+# Note: Standard library modules used (no additional packages needed):
+# - sqlite3 (built-in)
+# - json (built-in)
+# - socket (built-in)
+# - sys, os, traceback, datetime, time (built-in)
