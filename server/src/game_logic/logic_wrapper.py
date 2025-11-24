@@ -13,13 +13,6 @@ from db_handler import insert_move, get_moves, update_player_elo, update_game_re
 def main():
     try:
         # Read JSON from stdin or command line argument
-        # For simplicity with _popen, let's assume we pass the JSON string as an argument
-        # But passing complex JSON as arg in Windows cmd can be tricky with escaping.
-        # Better to read from stdin if possible, but _popen("cmd", "r") only allows reading stdout.
-        # _popen("cmd", "w") allows writing to stdin.
-        # Let's try reading from argv first as it's easier to implement in C++ side for a start 
-        # (just string concatenation), provided we escape quotes.
-        # Actually, standard way for IPC is stdin/stdout.
         
         if len(sys.argv) > 1:
             # Join all args in case spaces split them (though we should quote properly)

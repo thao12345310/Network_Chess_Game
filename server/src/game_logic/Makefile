@@ -1,7 +1,18 @@
-all: server
+# Detect OS
+ifeq ($(OS),Windows_NT)
+    TARGET = server.exe
+    LIBS = -lws2_32
+    RM = del
+else
+    TARGET = server
+    LIBS = -pthread
+    RM = rm -f
+endif
 
-server: main.cpp NetworkInterface.cpp
-	g++ -o server main.cpp NetworkInterface.cpp -lws2_32
+all: $(TARGET)
+
+$(TARGET): main.cpp NetworkInterface.cpp
+	g++ -o $(TARGET) main.cpp NetworkInterface.cpp $(LIBS)
 
 clean:
-	del server.exe
+	$(RM) $(TARGET)

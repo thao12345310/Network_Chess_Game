@@ -4,18 +4,22 @@
 #include <vector>
 #include <sstream>
 
-#pragma comment(lib, "ws2_32.lib")
-
 NetworkInterface::NetworkInterface(int port) : port(port), running(false), server_socket(INVALID_SOCKET) {
+#ifdef _WIN32
     WSADATA wsaData;
     WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
 }
 
 NetworkInterface::~NetworkInterface() {
     if (server_socket != INVALID_SOCKET) {
+#ifdef _WIN32
         closesocket(server_socket);
+        WSACleanup();
+#else
+        close(server_socket);
+#endif
     }
-    WSACleanup();
 }
 
 void NetworkInterface::start() {
@@ -24,6 +28,10 @@ void NetworkInterface::start() {
         std::cerr << "Failed to create socket" << std::endl;
         return;
     }
+
+    // Allow address reuse
+    int opt = 1;
+    setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt));
 
     sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
@@ -64,27 +72,27 @@ void NetworkInterface::handle_client(SOCKET client_socket) {
         buffer[bytes_received] = '\0';
         std::string request(buffer);
         
-        // Handle multiple commands in one buffer if necessary, 
-        // but for now assume one command per recv or simple newline split
         std::stringstream ss(request);
         std::string line;
         while (std::getline(ss, line)) {
             if (line.empty()) continue;
-            // Remove \r if present (Windows)
             if (!line.empty() && line.back() == '\r') line.pop_back();
             
             std::string response = process_request(line);
-            int sent = send(client_socket, response.c_str(), response.length(), 0);
+            send(client_socket, response.c_str(), response.length(), 0);
             send(client_socket, "\n", 1, 0);
         }
     }
+#ifdef _WIN32
     closesocket(client_socket);
+#else
+    close(client_socket);
+#endif
 }
 
 std::string NetworkInterface::process_request(const std::string& request) {
     std::cout << "Received: " << request << std::endl;
 
-    // Escape double quotes in JSON for command line
     std::string escaped_request;
     for (char c : request) {
         if (c == '"') {
@@ -94,10 +102,20 @@ std::string NetworkInterface::process_request(const std::string& request) {
         }
     }
 
-    std::string command = "python logic_wrapper.py \"" + escaped_request + "\"";
+    std::string command = "python3 logic_wrapper.py \"" + escaped_request + "\"";
+#ifdef _WIN32
+    command = "python logic_wrapper.py \"" + escaped_request + "\"";
+#endif
     
     std::string result = "";
-    FILE* pipe = _popen(command.c_str(), "r");
+    FILE* pipe = nullptr;
+
+#ifdef _WIN32
+    pipe = _popen(command.c_str(), "r");
+#else
+    pipe = popen(command.c_str(), "r");
+#endif
+
     if (!pipe) {
         return "{\"status\": \"error\", \"message\": \"Failed to open pipe\"}";
     }
@@ -106,9 +124,13 @@ std::string NetworkInterface::process_request(const std::string& request) {
     while (fgets(buffer, 128, pipe) != NULL) {
         result += buffer;
     }
+
+#ifdef _WIN32
     _pclose(pipe);
+#else
+    pclose(pipe);
+#endif
     
-    // Trim whitespace/newlines from result
     size_t first = result.find_first_not_of(" \t\n\r");
     if (first == std::string::npos) {
         result = "";
@@ -117,7 +139,6 @@ std::string NetworkInterface::process_request(const std::string& request) {
         result = result.substr(first, (last - first + 1));
     }
 
-    // If result is empty, something went wrong
     if (result.empty()) {
         return "{\"status\": \"error\", \"message\": \"Empty response from logic\"}";
     }
