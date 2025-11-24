@@ -1,0 +1,8 @@
+Received: {"action": "validate_move", "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "move": "e2e4"}
+Executing: python logic_wrapper.py "{\"action\": \"validate_move\", \"fen\": \"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\", \"move\": \"e2e4\"}"
+Result: {"status": "success", "is_valid": true, "next_fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"}
+Sent bytes: 113
+Received: {"action": "calculate_elo", "player_a_elo": 1200, "player_b_elo": 1200, "result_a": 1}
+Executing: python logic_wrapper.py "{\"action\": \"calculate_elo\", \"player_a_elo\": 1200, \"player_b_elo\": 1200, \"result_a\": 1}"
+Result: {"status": "success", "new_elo": 1216}
+Sent bytes: 38
