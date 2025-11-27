@@ -1,93 +1,21 @@
 #include "NetworkInterface.h"
 #include <iostream>
-#include <thread>
-#include <vector>
-#include <sstream>
+#include <functional>
 
-NetworkInterface::NetworkInterface(int port) : port(port), running(false), server_socket(INVALID_SOCKET) {
-#ifdef _WIN32
-    WSADATA wsaData;
-    WSAStartup(MAKEWORD(2, 2), &wsaData);
-#endif
+NetworkInterface::NetworkInterface(int port) : port(port) {
+    streamServer = std::make_unique<StreamServer>(
+        port, [this](const std::string &request) { return process_request(request); });
 }
 
-NetworkInterface::~NetworkInterface() {
-    if (server_socket != INVALID_SOCKET) {
-#ifdef _WIN32
-        closesocket(server_socket);
-        WSACleanup();
-#else
-        close(server_socket);
-#endif
-    }
-}
+NetworkInterface::~NetworkInterface() = default;
 
 void NetworkInterface::start() {
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket == INVALID_SOCKET) {
-        std::cerr << "Failed to create socket" << std::endl;
+    if (!streamServer) {
+        std::cerr << "Stream server is not initialized" << std::endl;
         return;
     }
 
-    // Allow address reuse
-    int opt = 1;
-    setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt));
-
-    sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    server_addr.sin_port = htons(port);
-
-    if (bind(server_socket, (sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-        std::cerr << "Bind failed" << std::endl;
-        return;
-    }
-
-    if (listen(server_socket, 5) == SOCKET_ERROR) {
-        std::cerr << "Listen failed" << std::endl;
-        return;
-    }
-
-    running = true;
-    std::cout << "Game Logic Server listening on 127.0.0.1:" << port << std::endl;
-
-    while (running) {
-        SOCKET client_socket = accept(server_socket, NULL, NULL);
-        if (client_socket == INVALID_SOCKET) {
-            std::cerr << "Accept failed" << std::endl;
-            continue;
-        }
-        
-        std::thread client_thread(&NetworkInterface::handle_client, this, client_socket);
-        client_thread.detach();
-    }
-}
-
-void NetworkInterface::handle_client(SOCKET client_socket) {
-    char buffer[4096];
-    while (true) {
-        int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
-        if (bytes_received <= 0) break;
-
-        buffer[bytes_received] = '\0';
-        std::string request(buffer);
-        
-        std::stringstream ss(request);
-        std::string line;
-        while (std::getline(ss, line)) {
-            if (line.empty()) continue;
-            if (!line.empty() && line.back() == '\r') line.pop_back();
-            
-            std::string response = process_request(line);
-            send(client_socket, response.c_str(), response.length(), 0);
-            send(client_socket, "\n", 1, 0);
-        }
-    }
-#ifdef _WIN32
-    closesocket(client_socket);
-#else
-    close(client_socket);
-#endif
+    streamServer->start();
 }
 
 std::string NetworkInterface::process_request(const std::string& request) {
