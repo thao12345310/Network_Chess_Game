@@ -93,6 +93,19 @@ int main() {
                 break;
             }
             case 5: {
+                // Check if game_id is set
+                if (client.getCurrentGameId().empty()) {
+                    std::string gameId;
+                    std::cout << "No game_id set. Enter game_id (or create game first): ";
+                    std::cin >> gameId;
+                    if (!gameId.empty()) {
+                        client.setGameId(gameId);
+                    } else {
+                        std::cout << "Cannot make move without game_id!" << std::endl;
+                        break;
+                    }
+                }
+                
                 std::string from, to;
                 std::cout << "From position (e.g., e2): ";
                 std::cin >> from;

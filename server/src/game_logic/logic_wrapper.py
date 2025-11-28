@@ -8,7 +8,11 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from game_logic import validate_move, determine_result
 from elo_system import calculate_elo
-from db_handler import insert_move, get_moves, update_player_elo, update_game_result
+from db_handler import (
+    insert_move, get_moves, update_player_elo, update_game_result,
+    get_game_fen, update_game_fen, get_current_player_turn, get_game_info
+)
+import datetime
 
 def main():
     try:
@@ -26,7 +30,9 @@ def main():
             return
 
         req = json.loads(input_str)
-        action = req.get('action')
+        
+        # Support both formats: "action" (from test) and "type" (from client)
+        action = req.get('action') or req.get('type')
         response = {}
 
         if action == 'validate_move':
@@ -73,6 +79,113 @@ def main():
             end = req.get('end_time')
             update_game_result(gid, wid, stat, end)
             response = {"status": "success"}
+        
+        # ========== Client Protocol: MOVE Handler ==========
+        
+        elif action == 'MOVE':
+            # Format from client: {"type": "MOVE", "game_id": "123", "from": "e2", "to": "e4"}
+            
+            # Get request data
+            game_id = req.get('game_id')
+            from_pos = req.get('from')
+            to_pos = req.get('to')
+            
+            # Validate required fields
+            if not game_id or (isinstance(game_id, str) and game_id.strip() == ""):
+                response = {
+                    "type": "MOVE_RESULT",
+                    "status": "error",
+                    "message": "Missing or empty 'game_id' in MOVE request. Please set game_id first."
+                }
+                print(json.dumps(response))
+                return
+            
+            if not from_pos or not to_pos:
+                response = {
+                    "type": "MOVE_RESULT",
+                    "status": "error",
+                    "message": "Missing 'from' or 'to' in MOVE request"
+                }
+                print(json.dumps(response))
+                return
+            
+            try:
+                game_id_int = int(game_id)
+                
+                # Get current FEN from database
+                current_fen = get_game_fen(game_id_int)
+                
+                # Convert format: "e2" + "e4" → "e2e4" (UCI format)
+                move_uci = from_pos + to_pos
+                
+                # Validate move
+                is_valid, next_fen = validate_move(current_fen, move_uci)
+                
+                if is_valid:
+                    # Get current player's turn
+                    current_player_id = get_current_player_turn(game_id_int)
+                    
+                    if not current_player_id:
+                        response = {
+                            "type": "MOVE_RESULT",
+                            "status": "error",
+                            "message": "Could not determine current player turn"
+                        }
+                        print(json.dumps(response))
+                        return
+                    
+                    # Save move to database
+                    insert_move(game_id_int, current_player_id, move_uci)
+                    
+                    # Update FEN in database
+                    update_game_fen(game_id_int, next_fen)
+                    
+                    # Check game result
+                    game_result = determine_result(next_fen)
+                    
+                    # Update game status if game ended
+                    if game_result in ['checkmate', 'draw']:
+                        winner_id = None
+                        if game_result == 'checkmate':
+                            # Winner is the player who just moved
+                            winner_id = current_player_id
+                        
+                        update_game_result(
+                            game_id_int,
+                            winner_id,
+                            'FINISHED',
+                            datetime.datetime.utcnow().isoformat()
+                        )
+                    
+                    # Success response
+                    response = {
+                        "type": "MOVE_RESULT",
+                        "status": "success",
+                        "is_valid": True,
+                        "next_fen": next_fen,
+                        "game_result": game_result
+                    }
+                else:
+                    # Invalid move
+                    response = {
+                        "type": "MOVE_RESULT",
+                        "status": "error",
+                        "is_valid": False,
+                        "message": "Invalid move"
+                    }
+                    
+            except ValueError:
+                response = {
+                    "type": "MOVE_RESULT",
+                    "status": "error",
+                    "message": "Invalid game_id format. Must be a number."
+                }
+            except Exception as e:
+                response = {
+                    "type": "MOVE_RESULT",
+                    "status": "error",
+                    "message": f"Error processing move: {str(e)}"
+                }
 
         else:
             response = {"status": "error", "message": f"Unknown action: {action}"}
