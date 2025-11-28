@@ -33,7 +33,7 @@ STREAM_SERVER_OBJ = $(BUILD_DIR)/StreamServer.o
 
 # Compiler flags
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Wextra $(INCLUDES)
+CXXFLAGS = -std=c++14 -Wall -Wextra $(INCLUDES)
 
 # Default target
 all: $(TARGET)

@@ -27,7 +27,7 @@ INCLUDES = -I$(SRC_DIR) -I$(GAME_LOGIC_DIR)
 
 # Compiler flags
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Wextra $(INCLUDES)
+CXXFLAGS = -std=c++14 -Wall -Wextra $(INCLUDES)
 
 # Default target
 all: $(TARGET)
