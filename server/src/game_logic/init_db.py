@@ -1,6 +1,9 @@
 import sqlite3
 from database import get_connection
 
+# Starting position FEN
+INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
 def init_db():
     conn = get_connection()
     cur = conn.cursor()
@@ -26,10 +29,26 @@ def init_db():
             end_time TEXT,
             winner_id INTEGER,
             status TEXT CHECK(status IN ('ONGOING', 'FINISHED', 'CANCELLED')) DEFAULT 'ONGOING',
+            current_fen TEXT DEFAULT 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
             FOREIGN KEY (white_id) REFERENCES Player(player_id),
             FOREIGN KEY (black_id) REFERENCES Player(player_id),
             FOREIGN KEY (winner_id) REFERENCES Player(player_id)
         )
+    """)
+    
+    # Migration: Add current_fen column if it doesn't exist (for existing databases)
+    try:
+        cur.execute("ALTER TABLE Game ADD COLUMN current_fen TEXT DEFAULT 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'")
+        conn.commit()
+        print("✅ Added current_fen column to existing Game table")
+    except sqlite3.OperationalError:
+        pass  # Column already exists, no need to add
+    
+    # Update existing games that have NULL current_fen
+    cur.execute("""
+        UPDATE Game 
+        SET current_fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+        WHERE current_fen IS NULL
     """)
 
     # Bảng Move

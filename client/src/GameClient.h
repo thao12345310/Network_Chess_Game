@@ -75,6 +75,9 @@ public:
     bool hasMessage();
     std::string getCurrentUsername() const;
     std::string getCurrentGameId() const;
+    
+    // Set game_id manually (for testing)
+    void setGameId(const std::string& gameId);
 };
 
 #endif

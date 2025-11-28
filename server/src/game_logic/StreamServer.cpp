@@ -82,7 +82,9 @@ void StreamServer::start() {
 }
 
 void StreamServer::handleClient(SOCKET clientSocket) {
+    std::string messageBuffer;
     char buffer[4096];
+    
     while (true) {
         int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
         if (bytesReceived <= 0) {
@@ -90,16 +92,21 @@ void StreamServer::handleClient(SOCKET clientSocket) {
         }
 
         buffer[bytesReceived] = '\0';
-        std::string request(buffer);
+        messageBuffer += std::string(buffer, bytesReceived);
 
-        std::stringstream ss(request);
-        std::string line;
-        while (std::getline(ss, line)) {
-            if (line.empty()) {
-                continue;
-            }
+        // Process complete messages (lines ending with \n)
+        size_t pos;
+        while ((pos = messageBuffer.find('\n')) != std::string::npos) {
+            std::string line = messageBuffer.substr(0, pos);
+            messageBuffer.erase(0, pos + 1);
+
+            // Remove \r if present (Windows line ending)
             if (!line.empty() && line.back() == '\r') {
                 line.pop_back();
+            }
+
+            if (line.empty()) {
+                continue;
             }
 
             std::string response = handler ? handler(line) : "";
