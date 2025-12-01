@@ -128,8 +128,8 @@ bool GameClient::sendMove(const std::string &fromPos, const std::string &toPos)
     msg["game_id"] = currentGameId;
     msg["from"] = fromPos;
     msg["to"] = toPos;
-    msg["session_token"] = netClient->getSessionToken();
-    msg["timestamp"] = static_cast<int>(std::time(nullptr));
+    // msg["session_token"] = netClient->getSessionToken();
+    // msg["timestamp"] = static_cast<int>(std::time(nullptr));
 
     return netClient->sendMessage(msg);
 }
@@ -330,6 +330,11 @@ std::string GameClient::getCurrentUsername() const
 std::string GameClient::getCurrentGameId() const
 {
     return currentGameId;
+}
+
+void GameClient::setGameId(const std::string& gameId)
+{
+    currentGameId = gameId;
 }
 
 // =====================================
