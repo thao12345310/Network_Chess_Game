@@ -112,6 +112,17 @@ def main():
             try:
                 game_id_int = int(game_id)
                 
+                # Check if game exists first
+                game_info = get_game_info(game_id_int)
+                if not game_info:
+                    response = {
+                        "type": "MOVE_RESULT",
+                        "status": "error",
+                        "message": f"Game ID {game_id_int} does not exist. Please create a game first or use a valid game_id."
+                    }
+                    print(json.dumps(response))
+                    return
+                
                 # Get current FEN from database
                 current_fen = get_game_fen(game_id_int)
                 
@@ -126,10 +137,23 @@ def main():
                     current_player_id = get_current_player_turn(game_id_int)
                     
                     if not current_player_id:
+                        # Provide more detailed error message using game_info we already have
+                        white_id, black_id = game_info[1], game_info[2]
+                        fen = game_info[8] if len(game_info) > 8 else None
+                        if not fen:
+                            error_msg = f"Game {game_id_int} exists but has no FEN. Game may be corrupted. Please reset database."
+                        else:
+                            parts = fen.split()
+                            if len(parts) < 2:
+                                error_msg = f"Game {game_id_int} has invalid FEN format: '{fen[:50]}...'"
+                            else:
+                                turn = parts[1]
+                                error_msg = f"Game {game_id_int} exists but could not determine turn. FEN turn indicator: '{turn}' (expected 'w' or 'b'). White ID: {white_id}, Black ID: {black_id}."
+                        
                         response = {
                             "type": "MOVE_RESULT",
                             "status": "error",
-                            "message": "Could not determine current player turn"
+                            "message": error_msg
                         }
                         print(json.dumps(response))
                         return

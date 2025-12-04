@@ -94,9 +94,26 @@ def get_current_player_turn(game_id):
     """
     Get player_id of the player whose turn it is to move.
     Based on FEN turn indicator (w = white, b = black).
-    Returns None if game not found.
+    Returns None if game not found or invalid.
     """
-    fen = get_game_fen(game_id)
+    # First check if game exists
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT white_id, black_id, current_fen FROM Game WHERE game_id = ?",
+        (game_id,)
+    )
+    result = cur.fetchone()
+    conn.close()
+    
+    if not result:
+        return None  # Game not found
+    
+    white_id, black_id, fen = result
+    
+    # If FEN is None or empty, return None
+    if not fen:
+        return None
     
     # Parse FEN to get turn: "rnbqkbnr/... w ..." or "rnbqkbnr/... b ..."
     parts = fen.split()
@@ -104,21 +121,6 @@ def get_current_player_turn(game_id):
         return None
     
     turn_char = parts[1]  # 'w' or 'b'
-    
-    # Get white_id and black_id from Game table
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT white_id, black_id FROM Game WHERE game_id = ?",
-        (game_id,)
-    )
-    result = cur.fetchone()
-    conn.close()
-    
-    if not result:
-        return None
-    
-    white_id, black_id = result
     
     # Return player_id based on turn
     if turn_char == 'w':
