@@ -40,6 +40,40 @@ def update_player_elo(player_id, new_elo):
     conn.close()
 
 
+def get_player_rating(player_id):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT elo FROM Player WHERE player_id = ?", (player_id,))
+    result = cur.fetchone()
+    conn.close()
+    if result:
+        return result[0]
+    return 1200 # Default if not found, though ideally should exist
+
+
+def update_both_players_elo(player_a_id, new_elo_a, player_b_id, new_elo_b):
+    """
+    Updates ELO for two players within a single transaction.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE Player SET elo = ? WHERE player_id = ?",
+            (new_elo_a, player_a_id),
+        )
+        cur.execute(
+            "UPDATE Player SET elo = ? WHERE player_id = ?",
+            (new_elo_b, player_b_id),
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+
 def update_game_result(game_id, winner_id, status, end_time):
     conn = get_connection()
     cur = conn.cursor()
@@ -94,9 +128,26 @@ def get_current_player_turn(game_id):
     """
     Get player_id of the player whose turn it is to move.
     Based on FEN turn indicator (w = white, b = black).
-    Returns None if game not found.
+    Returns None if game not found or invalid.
     """
-    fen = get_game_fen(game_id)
+    # First check if game exists
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT white_id, black_id, current_fen FROM Game WHERE game_id = ?",
+        (game_id,)
+    )
+    result = cur.fetchone()
+    conn.close()
+    
+    if not result:
+        return None  # Game not found
+    
+    white_id, black_id, fen = result
+    
+    # If FEN is None or empty, return None
+    if not fen:
+        return None
     
     # Parse FEN to get turn: "rnbqkbnr/... w ..." or "rnbqkbnr/... b ..."
     parts = fen.split()
@@ -104,21 +155,6 @@ def get_current_player_turn(game_id):
         return None
     
     turn_char = parts[1]  # 'w' or 'b'
-    
-    # Get white_id and black_id from Game table
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT white_id, black_id FROM Game WHERE game_id = ?",
-        (game_id,)
-    )
-    result = cur.fetchone()
-    conn.close()
-    
-    if not result:
-        return None
-    
-    white_id, black_id = result
     
     # Return player_id based on turn
     if turn_char == 'w':
@@ -150,3 +186,53 @@ def get_game_info(game_id):
     game = cur.fetchone()
     conn.close()
     return game
+
+
+def get_game_details(game_id):
+    """
+    Get full game details for logging/replay.
+    Returns dictionary with game info, players, and moves.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    # Get Game and Player info
+    cur.execute(
+        """
+        SELECT 
+            g.game_id, g.mode, g.start_time, g.end_time, g.status, g.winner_id,
+            p1.username as white_username, p1.elo as white_elo,
+            p2.username as black_username, p2.elo as black_elo
+        FROM Game g
+        JOIN Player p1 ON g.white_id = p1.player_id
+        JOIN Player p2 ON g.black_id = p2.player_id
+        WHERE g.game_id = ?
+        """,
+        (game_id,)
+    )
+    game_row = cur.fetchone()
+    
+    if not game_row:
+        conn.close()
+        return None
+        
+    # Get Moves
+    cur.execute(
+        "SELECT move_notation from Move WHERE game_id = ? ORDER BY move_id ASC",
+        (game_id,)
+    )
+    moves = [row[0] for row in cur.fetchall()]
+    
+    conn.close()
+    
+    return {
+        "game_id": game_row[0],
+        "mode": game_row[1],
+        "start_time": game_row[2],
+        "end_time": game_row[3],
+        "status": game_row[4],
+        "winner_id": game_row[5],
+        "white_player": {"username": game_row[6], "elo": game_row[7]},
+        "black_player": {"username": game_row[8], "elo": game_row[9]},
+        "moves": moves
+    }

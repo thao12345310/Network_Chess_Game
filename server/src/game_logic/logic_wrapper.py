@@ -10,7 +10,8 @@ from game_logic import validate_move, determine_result
 from elo_system import calculate_elo
 from db_handler import (
     insert_move, get_moves, update_player_elo, update_game_result,
-    get_game_fen, update_game_fen, get_current_player_turn, get_game_info
+    get_game_fen, update_game_fen, get_current_player_turn, get_game_info,
+    get_player_rating, update_both_players_elo, get_game_details
 )
 import datetime
 
@@ -50,8 +51,29 @@ def main():
             p_a = req.get('player_a_elo')
             p_b = req.get('player_b_elo')
             res_a = req.get('result_a')
-            new_elo = calculate_elo(p_a, p_b, res_a)
-            response = {"status": "success", "new_elo": new_elo}
+            new_a, new_b = calculate_elo(p_a, p_b, res_a)
+            response = {"status": "success", "new_elo_a": new_a, "new_elo_b": new_b}
+
+        elif action == 'process_match_elo':
+            p_a_id = req.get('player_a_id')
+            p_b_id = req.get('player_b_id')
+            result_a = req.get('result_a') # 1, 0.5, 0
+
+            # Fetch ratings
+            rating_a = get_player_rating(p_a_id)
+            rating_b = get_player_rating(p_b_id)
+
+            # Calculate new ratings
+            new_a, new_b = calculate_elo(rating_a, rating_b, result_a)
+
+            # Update DB transactionally
+            update_both_players_elo(p_a_id, new_a, p_b_id, new_b)
+
+            response = {
+                "status": "success",
+                "player_a": {"old_elo": rating_a, "new_elo": new_a},
+                "player_b": {"old_elo": rating_b, "new_elo": new_b}
+            }
         
         elif action == 'update_elo':
             pid = req.get('player_id')
@@ -72,6 +94,14 @@ def main():
             move_list = [m[1] for m in moves]
             response = {"status": "success", "moves": move_list}
         
+        elif action == 'get_game_log':
+            gid = req.get('game_id')
+            game_details = get_game_details(gid)
+            if game_details:
+                response = {"status": "success", "game_log": game_details}
+            else:
+                response = {"status": "error", "message": "Game not found"}
+
         elif action == 'update_game_result':
             gid = req.get('game_id')
             wid = req.get('winner_id')
@@ -112,6 +142,17 @@ def main():
             try:
                 game_id_int = int(game_id)
                 
+                # Check if game exists first
+                game_info = get_game_info(game_id_int)
+                if not game_info:
+                    response = {
+                        "type": "MOVE_RESULT",
+                        "status": "error",
+                        "message": f"Game ID {game_id_int} does not exist. Please create a game first or use a valid game_id."
+                    }
+                    print(json.dumps(response))
+                    return
+                
                 # Get current FEN from database
                 current_fen = get_game_fen(game_id_int)
                 
@@ -126,10 +167,23 @@ def main():
                     current_player_id = get_current_player_turn(game_id_int)
                     
                     if not current_player_id:
+                        # Provide more detailed error message using game_info we already have
+                        white_id, black_id = game_info[1], game_info[2]
+                        fen = game_info[8] if len(game_info) > 8 else None
+                        if not fen:
+                            error_msg = f"Game {game_id_int} exists but has no FEN. Game may be corrupted. Please reset database."
+                        else:
+                            parts = fen.split()
+                            if len(parts) < 2:
+                                error_msg = f"Game {game_id_int} has invalid FEN format: '{fen[:50]}...'"
+                            else:
+                                turn = parts[1]
+                                error_msg = f"Game {game_id_int} exists but could not determine turn. FEN turn indicator: '{turn}' (expected 'w' or 'b'). White ID: {white_id}, Black ID: {black_id}."
+                        
                         response = {
                             "type": "MOVE_RESULT",
                             "status": "error",
-                            "message": "Could not determine current player turn"
+                            "message": error_msg
                         }
                         print(json.dumps(response))
                         return
