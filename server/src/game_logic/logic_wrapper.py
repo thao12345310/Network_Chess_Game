@@ -11,7 +11,7 @@ from elo_system import calculate_elo
 from db_handler import (
     insert_move, get_moves, update_player_elo, update_game_result,
     get_game_fen, update_game_fen, get_current_player_turn, get_game_info,
-    get_player_rating, update_both_players_elo
+    get_player_rating, update_both_players_elo, get_game_details
 )
 import datetime
 
@@ -94,6 +94,14 @@ def main():
             move_list = [m[1] for m in moves]
             response = {"status": "success", "moves": move_list}
         
+        elif action == 'get_game_log':
+            gid = req.get('game_id')
+            game_details = get_game_details(gid)
+            if game_details:
+                response = {"status": "success", "game_log": game_details}
+            else:
+                response = {"status": "error", "message": "Game not found"}
+
         elif action == 'update_game_result':
             gid = req.get('game_id')
             wid = req.get('winner_id')
