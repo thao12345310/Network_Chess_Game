@@ -10,7 +10,8 @@ from game_logic import validate_move, determine_result
 from elo_system import calculate_elo
 from db_handler import (
     insert_move, get_moves, update_player_elo, update_game_result,
-    get_game_fen, update_game_fen, get_current_player_turn, get_game_info
+    get_game_fen, update_game_fen, get_current_player_turn, get_game_info,
+    get_player_rating, update_both_players_elo
 )
 import datetime
 
@@ -50,8 +51,29 @@ def main():
             p_a = req.get('player_a_elo')
             p_b = req.get('player_b_elo')
             res_a = req.get('result_a')
-            new_elo = calculate_elo(p_a, p_b, res_a)
-            response = {"status": "success", "new_elo": new_elo}
+            new_a, new_b = calculate_elo(p_a, p_b, res_a)
+            response = {"status": "success", "new_elo_a": new_a, "new_elo_b": new_b}
+
+        elif action == 'process_match_elo':
+            p_a_id = req.get('player_a_id')
+            p_b_id = req.get('player_b_id')
+            result_a = req.get('result_a') # 1, 0.5, 0
+
+            # Fetch ratings
+            rating_a = get_player_rating(p_a_id)
+            rating_b = get_player_rating(p_b_id)
+
+            # Calculate new ratings
+            new_a, new_b = calculate_elo(rating_a, rating_b, result_a)
+
+            # Update DB transactionally
+            update_both_players_elo(p_a_id, new_a, p_b_id, new_b)
+
+            response = {
+                "status": "success",
+                "player_a": {"old_elo": rating_a, "new_elo": new_a},
+                "player_b": {"old_elo": rating_b, "new_elo": new_b}
+            }
         
         elif action == 'update_elo':
             pid = req.get('player_id')

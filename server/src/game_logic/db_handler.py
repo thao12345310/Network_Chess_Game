@@ -40,6 +40,40 @@ def update_player_elo(player_id, new_elo):
     conn.close()
 
 
+def get_player_rating(player_id):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT elo FROM Player WHERE player_id = ?", (player_id,))
+    result = cur.fetchone()
+    conn.close()
+    if result:
+        return result[0]
+    return 1200 # Default if not found, though ideally should exist
+
+
+def update_both_players_elo(player_a_id, new_elo_a, player_b_id, new_elo_b):
+    """
+    Updates ELO for two players within a single transaction.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE Player SET elo = ? WHERE player_id = ?",
+            (new_elo_a, player_a_id),
+        )
+        cur.execute(
+            "UPDATE Player SET elo = ? WHERE player_id = ?",
+            (new_elo_b, player_b_id),
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+
 def update_game_result(game_id, winner_id, status, end_time):
     conn = get_connection()
     cur = conn.cursor()
