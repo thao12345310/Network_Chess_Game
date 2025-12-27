@@ -1,0 +1,6 @@
+# Python dependencies for Chess Client GUI
+
+# Tkinter is built-in with Python, no need to install
+
+# Optional: For better JSON handling (already in stdlib)
+# No external dependencies required!
