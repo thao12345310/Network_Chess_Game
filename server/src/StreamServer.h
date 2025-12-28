@@ -20,19 +20,22 @@
 
 class StreamServer {
 public:
-    using MessageHandler = std::function<std::string(const std::string &)>;
+    using MessageHandler = std::function<std::string(SOCKET, const std::string &)>;
+    using OnConnectionClosed = std::function<void(SOCKET)>;
 
     StreamServer(int port, MessageHandler handler);
     ~StreamServer();
 
     void start();
     void stop();
+    void setOnConnectionClosed(OnConnectionClosed callback);
 
 private:
     void handleClient(SOCKET clientSocket);
 
     int port;
     MessageHandler handler;
+    OnConnectionClosed onConnectionClosed;
     SOCKET serverSocket;
     bool running;
 };

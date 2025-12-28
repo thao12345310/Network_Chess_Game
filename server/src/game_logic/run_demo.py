@@ -26,13 +26,14 @@ def create_test_players_and_game():
     black_id = cur.lastrowid
 
     cur.execute(
-        "INSERT INTO Game (white_id, black_id, mode, start_time, status) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO Game (white_id, black_id, mode, start_time, status, current_fen) VALUES (?, ?, ?, ?, ?, ?)",
         (
             white_id,
             black_id,
             "CLASSICAL",
             datetime.datetime.utcnow().isoformat(),
             "ONGOING",
+            INITIAL_FEN,
         ),
     )
     game_id = cur.lastrowid

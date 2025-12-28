@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <utility>
 
 StreamServer::StreamServer(int port, MessageHandler handler)
     : port(port), handler(std::move(handler)), serverSocket(INVALID_SOCKET), running(false) {
@@ -81,8 +82,14 @@ void StreamServer::start() {
     stop();
 }
 
+void StreamServer::setOnConnectionClosed(OnConnectionClosed callback) {
+    onConnectionClosed = std::move(callback);
+}
+
 void StreamServer::handleClient(SOCKET clientSocket) {
+    std::string messageBuffer;
     char buffer[4096];
+    
     while (true) {
         int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
         if (bytesReceived <= 0) {
@@ -90,25 +97,35 @@ void StreamServer::handleClient(SOCKET clientSocket) {
         }
 
         buffer[bytesReceived] = '\0';
-        std::string request(buffer);
+        messageBuffer += std::string(buffer, bytesReceived);
 
-        std::stringstream ss(request);
-        std::string line;
-        while (std::getline(ss, line)) {
-            if (line.empty()) {
-                continue;
-            }
+        // Process complete messages (lines ending with \n)
+        size_t pos;
+        while ((pos = messageBuffer.find('\n')) != std::string::npos) {
+            std::string line = messageBuffer.substr(0, pos);
+            messageBuffer.erase(0, pos + 1);
+
+            // Remove \r if present (Windows line ending)
             if (!line.empty() && line.back() == '\r') {
                 line.pop_back();
             }
 
-            std::string response = handler ? handler(line) : "";
+            if (line.empty()) {
+                continue;
+            }
+
+            // Pass socket to handler
+            std::string response = handler ? handler(clientSocket, line) : "";
             if (response.empty()) {
                 response = "{\"status\": \"error\", \"message\": \"Empty response\"}";
             }
             send(clientSocket, response.c_str(), static_cast<int>(response.length()), 0);
             send(clientSocket, "\n", 1, 0);
         }
+    }
+
+    if (onConnectionClosed) {
+        onConnectionClosed(clientSocket);
     }
 
 #ifdef _WIN32

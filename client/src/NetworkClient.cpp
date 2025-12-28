@@ -109,8 +109,9 @@ bool NetworkClient::sendMessage(const Json::Value &message)
         return false;
     }
 
-    // Serialize JSON to string
+    // Serialize JSON to string (compact format, single line)
     Json::StreamWriterBuilder writer;
+    writer["indentation"] = "";  // Ensure compact format (no pretty printing)
     std::string jsonStr = Json::writeString(writer, message);
 
     // Add delimiter (newline) for message framing

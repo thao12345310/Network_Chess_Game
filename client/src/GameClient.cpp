@@ -46,7 +46,7 @@ bool GameClient::login(const std::string &username, const std::string &password)
     msg["type"] = "LOGIN";
     msg["username"] = username;
     msg["password"] = password;
-    msg["timestamp"] = static_cast<int>(std::time(nullptr));
+    // msg["timestamp"] = static_cast<int>(std::time(nullptr));
 
     if (netClient->sendMessage(msg))
     {
@@ -65,7 +65,7 @@ bool GameClient::registerAccount(const std::string &username,
     msg["username"] = username;
     msg["password"] = password;
     msg["email"] = email;
-    msg["timestamp"] = static_cast<int>(std::time(nullptr));
+    // msg["timestamp"] = static_cast<int>(std::time(nullptr));
 
     return netClient->sendMessage(msg);
 }
@@ -85,7 +85,7 @@ bool GameClient::requestPlayerList()
 {
     Json::Value msg;
     msg["type"] = "GET_PLAYER_LIST";
-    msg["session_token"] = netClient->getSessionToken();
+    // msg["session_token"] = netClient->getSessionToken();
 
     return netClient->sendMessage(msg);
 }
@@ -95,8 +95,8 @@ bool GameClient::sendChallenge(const std::string &opponentUsername)
     Json::Value msg;
     msg["type"] = "SEND_CHALLENGE";
     msg["opponent_username"] = opponentUsername;
-    msg["session_token"] = netClient->getSessionToken();
-    msg["timestamp"] = static_cast<int>(std::time(nullptr));
+    // msg["session_token"] = netClient->getSessionToken();
+    // msg["timestamp"] = static_cast<int>(std::time(nullptr));
 
     return netClient->sendMessage(msg);
 }
@@ -106,7 +106,7 @@ bool GameClient::acceptChallenge(const std::string &challengeId)
     Json::Value msg;
     msg["type"] = "ACCEPT_CHALLENGE";
     msg["challenge_id"] = challengeId;
-    msg["session_token"] = netClient->getSessionToken();
+    //msg["session_token"] = netClient->getSessionToken();
 
     return netClient->sendMessage(msg);
 }
@@ -116,7 +116,7 @@ bool GameClient::declineChallenge(const std::string &challengeId)
     Json::Value msg;
     msg["type"] = "DECLINE_CHALLENGE";
     msg["challenge_id"] = challengeId;
-    msg["session_token"] = netClient->getSessionToken();
+    //msg["session_token"] = netClient->getSessionToken();
 
     return netClient->sendMessage(msg);
 }
@@ -128,8 +128,8 @@ bool GameClient::sendMove(const std::string &fromPos, const std::string &toPos)
     msg["game_id"] = currentGameId;
     msg["from"] = fromPos;
     msg["to"] = toPos;
-    msg["session_token"] = netClient->getSessionToken();
-    msg["timestamp"] = static_cast<int>(std::time(nullptr));
+    // msg["session_token"] = netClient->getSessionToken();
+    // msg["timestamp"] = static_cast<int>(std::time(nullptr));
 
     return netClient->sendMessage(msg);
 }
@@ -139,7 +139,7 @@ bool GameClient::offerDraw()
     Json::Value msg;
     msg["type"] = "OFFER_DRAW";
     msg["game_id"] = currentGameId;
-    msg["session_token"] = netClient->getSessionToken();
+    //msg["session_token"] = netClient->getSessionToken();
 
     return netClient->sendMessage(msg);
 }
@@ -330,6 +330,11 @@ std::string GameClient::getCurrentUsername() const
 std::string GameClient::getCurrentGameId() const
 {
     return currentGameId;
+}
+
+void GameClient::setGameId(const std::string& gameId)
+{
+    currentGameId = gameId;
 }
 
 // =====================================
