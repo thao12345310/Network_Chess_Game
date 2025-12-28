@@ -19,9 +19,10 @@ GAME_LOGIC_DIR = game_logic
 BUILD_DIR = build
 
 # Source files
-MAIN_SRC = $(GAME_LOGIC_DIR)/main.cpp
+MAIN_SRC = main.cpp
 NETWORK_INTERFACE_SRC = $(GAME_LOGIC_DIR)/NetworkInterface.cpp
 STREAM_SERVER_SRC = StreamServer.cpp
+SERVER_SRC = Server.cpp
 
 # Header include paths
 INCLUDES = -I. -I$(GAME_LOGIC_DIR)
@@ -30,6 +31,7 @@ INCLUDES = -I. -I$(GAME_LOGIC_DIR)
 MAIN_OBJ = $(BUILD_DIR)/main.o
 NETWORK_INTERFACE_OBJ = $(BUILD_DIR)/NetworkInterface.o
 STREAM_SERVER_OBJ = $(BUILD_DIR)/StreamServer.o
+SERVER_OBJ = $(BUILD_DIR)/Server.o
 
 # Compiler flags
 CXX = g++
@@ -39,9 +41,10 @@ CXXFLAGS = -std=c++14 -Wall -Wextra $(INCLUDES)
 all: $(TARGET)
 
 # Build executable
-$(TARGET): $(MAIN_SRC) $(NETWORK_INTERFACE_SRC) $(STREAM_SERVER_SRC)
+$(TARGET): $(MAIN_SRC) $(NETWORK_INTERFACE_SRC) $(STREAM_SERVER_SRC) $(SERVER_SRC)
 	@echo Building server...
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(MAIN_SRC) $(NETWORK_INTERFACE_SRC) $(STREAM_SERVER_SRC) $(LIBS)
+	$(CXX) $(CXXFLAGS) -o $(TARGET) $(MAIN_SRC) $(NETWORK_INTERFACE_SRC) $(STREAM_SERVER_SRC) $(SERVER_SRC) $(LIBS)
+
 	@echo Build complete: $(TARGET)
 
 # Clean build files
