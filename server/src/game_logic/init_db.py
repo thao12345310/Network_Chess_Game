@@ -63,6 +63,15 @@ def init_db():
         )
     """)
 
+    # Bảng Lobby (Ready Players)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS Lobby (
+            player_id INTEGER PRIMARY KEY,
+            joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (player_id) REFERENCES Player(player_id)
+        )
+    """)
+
     conn.commit()
     conn.close()
     print("✅ Database initialized successfully!")

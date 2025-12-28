@@ -236,3 +236,58 @@ def get_game_details(game_id):
         "black_player": {"username": game_row[8], "elo": game_row[9]},
         "moves": moves
     }
+
+
+# ========== Lobby / Ready Players Management ==========
+
+def add_to_lobby(player_id):
+    """
+    Add a player to the ready lobby.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("INSERT OR IGNORE INTO Lobby (player_id) VALUES (?)", (player_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def remove_from_lobby(player_id):
+    """
+    Remove a player from the ready lobby.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM Lobby WHERE player_id = ?", (player_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_lobby_players():
+    """
+    Get a list of all players currently in the lobby.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT l.player_id, p.username, p.elo, l.joined_at
+            FROM Lobby l
+            JOIN Player p ON l.player_id = p.player_id
+            ORDER BY l.joined_at ASC
+        """)
+        return [
+            {
+                "player_id": r[0], 
+                "username": r[1], 
+                "elo": r[2], 
+                "joined_at": r[3]
+            } 
+            for r in cur.fetchall()
+        ]
+    finally:
+        conn.close()
+

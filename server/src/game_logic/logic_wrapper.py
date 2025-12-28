@@ -11,7 +11,8 @@ from elo_system import calculate_elo
 from db_handler import (
     insert_move, get_moves, update_player_elo, update_game_result,
     get_game_fen, update_game_fen, get_current_player_turn, get_game_info,
-    get_player_rating, update_both_players_elo, get_game_details
+    get_player_rating, update_both_players_elo, get_game_details,
+    add_to_lobby, remove_from_lobby, get_lobby_players
 )
 import datetime
 
@@ -108,8 +109,31 @@ def main():
             stat = req.get('status')
             end = req.get('end_time')
             update_game_result(gid, wid, stat, end)
+
             response = {"status": "success"}
         
+        # ========== Lobby / Ready Players ==========
+
+        elif action == 'join_lobby':
+            pid = req.get('player_id')
+            if not pid:
+                response = {"status": "error", "message": "Missing player_id"}
+            else:
+                add_to_lobby(pid)
+                response = {"status": "success", "message": "Added to lobby"}
+
+        elif action == 'leave_lobby':
+            pid = req.get('player_id')
+            if not pid:
+                response = {"status": "error", "message": "Missing player_id"}
+            else:
+                remove_from_lobby(pid)
+                response = {"status": "success", "message": "Removed from lobby"}
+
+        elif action == 'get_ready_players':
+            players = get_lobby_players()
+            response = {"status": "success", "players": players}
+
         # ========== Client Protocol: MOVE Handler ==========
         
         elif action == 'MOVE':

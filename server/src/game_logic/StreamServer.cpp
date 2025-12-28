@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <utility>
 
 StreamServer::StreamServer(int port, MessageHandler handler)
     : port(port), handler(std::move(handler)), serverSocket(INVALID_SOCKET), running(false) {
@@ -81,6 +82,10 @@ void StreamServer::start() {
     stop();
 }
 
+void StreamServer::setOnConnectionClosed(OnConnectionClosed callback) {
+    onConnectionClosed = std::move(callback);
+}
+
 void StreamServer::handleClient(SOCKET clientSocket) {
     std::string messageBuffer;
     char buffer[4096];
@@ -109,13 +114,18 @@ void StreamServer::handleClient(SOCKET clientSocket) {
                 continue;
             }
 
-            std::string response = handler ? handler(line) : "";
+            // Pass socket to handler
+            std::string response = handler ? handler(clientSocket, line) : "";
             if (response.empty()) {
                 response = "{\"status\": \"error\", \"message\": \"Empty response\"}";
             }
             send(clientSocket, response.c_str(), static_cast<int>(response.length()), 0);
             send(clientSocket, "\n", 1, 0);
         }
+    }
+
+    if (onConnectionClosed) {
+        onConnectionClosed(clientSocket);
     }
 
 #ifdef _WIN32
