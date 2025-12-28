@@ -1,6 +1,46 @@
 import sqlite3
+import hashlib # Added for future use, though currently using plaintext as per snippet context
 from database import get_connection
 from init_db import INITIAL_FEN
+import datetime
+
+def register_user(username, password, email):
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        # Check if username exists
+        cur.execute("SELECT player_id FROM Player WHERE username = ?", (username,))
+        if cur.fetchone():
+            return None # Username taken
+            
+        cur.execute(
+            "INSERT INTO Player (username, password_hash, email, elo) VALUES (?, ?, ?, 1200)",
+            (username, password, email)
+        )
+        pid = cur.lastrowid
+        conn.commit()
+        return pid
+    except Exception as e:
+        print(f"DB Error: {e}")
+        return None
+    finally:
+        conn.close()
+
+def verify_user(username, password):
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT player_id, password_hash FROM Player WHERE username = ?", (username,))
+        row = cur.fetchone()
+        if row:
+            pid, stored_pass = row
+            if stored_pass == password:
+                return pid
+    finally:
+        conn.close()
+    return None
+
+
 
 
 def insert_move(game_id, player_id, move_notation):
@@ -266,6 +306,7 @@ def remove_from_lobby(player_id):
         conn.close()
 
 
+
 def get_lobby_players():
     """
     Get a list of all players currently in the lobby.
@@ -288,6 +329,28 @@ def get_lobby_players():
             } 
             for r in cur.fetchall()
         ]
+    finally:
+        conn.close()
+
+
+def create_game(white_id, black_id, mode='ranked'):
+    """
+    Create a new game in the database.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        start_time = datetime.datetime.utcnow().isoformat()
+        cur.execute(
+            """
+            INSERT INTO Game (white_id, black_id, mode, start_time, status, current_fen)
+            VALUES (?, ?, ?, ?, 'ACTIVE', ?)
+            """,
+            (white_id, black_id, mode, start_time, INITIAL_FEN)
+        )
+        game_id = cur.lastrowid
+        conn.commit()
+        return game_id
     finally:
         conn.close()
 

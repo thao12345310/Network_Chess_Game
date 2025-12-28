@@ -12,7 +12,8 @@ from db_handler import (
     insert_move, get_moves, update_player_elo, update_game_result,
     get_game_fen, update_game_fen, get_current_player_turn, get_game_info,
     get_player_rating, update_both_players_elo, get_game_details,
-    add_to_lobby, remove_from_lobby, get_lobby_players
+    add_to_lobby, remove_from_lobby, get_lobby_players, create_game,
+    register_user, verify_user
 )
 import datetime
 
@@ -42,6 +43,28 @@ def main():
             move = req.get('move')
             is_valid, next_fen = validate_move(fen, move)
             response = {"status": "success", "is_valid": is_valid, "next_fen": next_fen}
+
+        elif action == 'REGISTER':
+            user = req.get('username')
+            pw = req.get('password')
+            email = req.get('email')
+            pid = register_user(user, pw, email)
+            if pid:
+                response = {"type": "REGISTER_SUCCESS", "status": "success", "player_id": pid}
+            else:
+                response = {"type": "REGISTER_FAILED", "status": "error", "message": "Username taken or error"}
+
+        elif action == 'LOGIN':
+            user = req.get('username')
+            pw = req.get('password')
+            pid = verify_user(user, pw)
+            if pid:
+                 # In a real app we would generate a token. Here we use pid as token for simplicity or generate a dummy one.
+                 token = f"sess_{pid}"
+                 response = {"type": "LOGIN_SUCCESS", "status": "success", "player_id": pid, "session_token": token, "username": user}
+            else:
+                 response = {"type": "LOGIN_FAILED", "status": "error", "message": "Invalid credentials"}
+
         
         elif action == 'game_result':
             fen = req.get('fen')
@@ -130,9 +153,19 @@ def main():
                 remove_from_lobby(pid)
                 response = {"status": "success", "message": "Removed from lobby"}
 
-        elif action == 'get_ready_players':
+        elif action == 'get_ready_players' or action == 'GET_PLAYER_LIST':
             players = get_lobby_players()
-            response = {"status": "success", "players": players}
+            response = {"type": "PLAYER_LIST", "status": "success", "players": players}
+
+        elif action == 'create_game':
+            white_id = req.get('white_id')
+            black_id = req.get('black_id')
+            mode = req.get('mode', 'ranked')
+            if not white_id or not black_id:
+                response = {"status": "error", "message": "Missing white_id or black_id"}
+            else:
+                gid = create_game(white_id, black_id, mode)
+                response = {"status": "success", "game_id": gid}
 
         # ========== Client Protocol: MOVE Handler ==========
         
