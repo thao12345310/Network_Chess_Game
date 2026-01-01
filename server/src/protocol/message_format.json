@@ -1,0 +1,54 @@
+{
+    "challenge": {
+        "description": "Send a challenge request to another player",
+        "format": {
+            "type": "challenge",
+            "from": "playerA",
+            "to": "playerB"
+        }
+    },
+    "challenge_response": {
+        "description": "Accept or decline a challenge",
+        "format": {
+            "type": "challenge_response",
+            "from": "playerB",
+            "accepted": true
+        }
+    },
+    "move": {
+        "description": "Send a chess move",
+        "format": {
+            "type": "move",
+            "from": "playerA",
+            "data": "e2e4"
+        }
+    },
+    "emoji": {
+        "description": "Send an emoji or interaction",
+        "format": {
+            "type": "emoji",
+            "from": "playerA",
+            "value": "👍"
+        }
+    },
+    "login": {
+        "description": "Initial login (implicit or explicit)",
+        "format": {
+            "type": "login",
+            "username": "playerA"
+        }
+    },
+    "list_players": {
+        "description": "Request list of online players",
+        "format": {
+            "type": "list_players"
+        }
+    },
+    "player_list": {
+        "description": "Response with list of players",
+        "format": {
+            "type": "player_list",
+            "players": ["playerA", "playerB"]
+        }
+    }
+}

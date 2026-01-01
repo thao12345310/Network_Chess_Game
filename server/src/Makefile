@@ -1,5 +1,5 @@
 # Makefile for Chess Game Server
-# Build từ thư mục server/src/
+# Build from server/src/
 
 # Detect OS
 ifeq ($(OS),Windows_NT)
@@ -17,21 +17,18 @@ endif
 # Directories
 GAME_LOGIC_DIR = game_logic
 BUILD_DIR = build
+PROTOCOL_DIR = protocol
 
 # Source files
 MAIN_SRC = main.cpp
-NETWORK_INTERFACE_SRC = $(GAME_LOGIC_DIR)/NetworkInterface.cpp
-STREAM_SERVER_SRC = StreamServer.cpp
 SERVER_SRC = Server.cpp
+SESSION_SRC = ClientSession.cpp
+MATCHMAKING_SRC = MatchmakingService.cpp
+MESSAGE_HANDLER_SRC = MessageHandler.cpp
 
 # Header include paths
+# Ensure nlohmann/json.hpp is available in include path
 INCLUDES = -I. -I$(GAME_LOGIC_DIR)
-
-# Object files (optional, for incremental builds)
-MAIN_OBJ = $(BUILD_DIR)/main.o
-NETWORK_INTERFACE_OBJ = $(BUILD_DIR)/NetworkInterface.o
-STREAM_SERVER_OBJ = $(BUILD_DIR)/StreamServer.o
-SERVER_OBJ = $(BUILD_DIR)/Server.o
 
 # Compiler flags
 CXX = g++
@@ -41,21 +38,15 @@ CXXFLAGS = -std=c++14 -Wall -Wextra $(INCLUDES)
 all: $(TARGET)
 
 # Build executable
-$(TARGET): $(MAIN_SRC) $(NETWORK_INTERFACE_SRC) $(STREAM_SERVER_SRC) $(SERVER_SRC)
+$(TARGET): $(MAIN_SRC) $(SERVER_SRC) $(SESSION_SRC) $(MATCHMAKING_SRC) $(MESSAGE_HANDLER_SRC)
 	@echo Building server...
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(MAIN_SRC) $(NETWORK_INTERFACE_SRC) $(STREAM_SERVER_SRC) $(SERVER_SRC) $(LIBS)
-
+	$(CXX) $(CXXFLAGS) -o $(TARGET) $(MAIN_SRC) $(SERVER_SRC) $(SESSION_SRC) $(MATCHMAKING_SRC) $(MESSAGE_HANDLER_SRC) $(LIBS)
 	@echo Build complete: $(TARGET)
 
 # Clean build files
 clean:
 	@echo Cleaning...
 	$(RM) $(TARGET) $(TARGET).exe
-ifeq ($(OS),Windows_NT)
-	if exist $(BUILD_DIR) rmdir /S /Q $(BUILD_DIR)
-else
-	rm -rf $(BUILD_DIR)
-endif
 	@echo Clean complete.
 
 # Run the server
@@ -72,4 +63,3 @@ help:
 	@echo "  help    - Show this help message"
 
 .PHONY: all clean run help
-

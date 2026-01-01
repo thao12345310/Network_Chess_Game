@@ -22,6 +22,7 @@ private:
     
     std::string currentUsername;
     std::string currentGameId;
+    int currentPlayerId = 0;
     
     // Callbacks
     MessageCallback onGameUpdate;
@@ -48,6 +49,7 @@ public:
     
     // Player list & matchmaking
     bool requestPlayerList();
+    bool joinLobby();
     bool sendChallenge(const std::string& opponentUsername);
     bool acceptChallenge(const std::string& challengeId);
     bool declineChallenge(const std::string& challengeId);

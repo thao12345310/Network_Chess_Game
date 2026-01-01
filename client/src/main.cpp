@@ -14,6 +14,7 @@ void printMenu() {
     std::cout << "7. Offer draw" << std::endl;
     std::cout << "8. Get match history" << std::endl;
     std::cout << "9. Logout" << std::endl;
+    std::cout << "10. Join Lobby (Must do to appear in list)" << std::endl;
     std::cout << "0. Quit" << std::endl;
     std::cout << "Choice: ";
 }
@@ -125,6 +126,10 @@ int main() {
                 break;
             case 9:
                 client.logout();
+                break;
+            case 10:
+                client.joinLobby();
+                std::cout << "Request sent to join lobby..." << std::endl;
                 break;
             default:
                 std::cout << "Invalid choice!" << std::endl;
