@@ -17,6 +17,27 @@ def insert_move(game_id, player_id, move_notation):
     conn.close()
 
 
+def create_game(white_id, black_id, mode, time_limit):
+    """
+    Create a new game with specified mode and time limit.
+    time_limit should be in seconds.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO Game (white_id, black_id, mode, white_time, black_time, status)
+        VALUES (?, ?, ?, ?, ?, 'ONGOING')
+        """,
+        (white_id, black_id, mode, time_limit, time_limit)
+    )
+    game_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return game_id
+
+
+
 def get_moves(game_id):
     conn = get_connection()
     cur = conn.cursor()
@@ -122,6 +143,41 @@ def update_game_fen(game_id, new_fen):
     )
     conn.commit()
     conn.close()
+
+
+
+def update_game_time(game_id, white_time, black_time, last_move_time):
+    """
+    Update remaining time for both players and the last move timestamp.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE Game 
+        SET white_time = ?, black_time = ?, last_move_time = ?
+        WHERE game_id = ?
+        """,
+        (white_time, black_time, last_move_time, game_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_game_time(game_id):
+    """
+    Get current time status of a game.
+    Returns tuple: (white_time, black_time, last_move_time)
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT white_time, black_time, last_move_time FROM Game WHERE game_id = ?",
+        (game_id,)
+    )
+    result = cur.fetchone()
+    conn.close()
+    return result if result else (600.0, 600.0, None)
 
 
 def get_current_player_turn(game_id):
