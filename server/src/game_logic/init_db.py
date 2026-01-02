@@ -30,19 +30,30 @@ def init_db():
             winner_id INTEGER,
             status TEXT CHECK(status IN ('ONGOING', 'FINISHED', 'CANCELLED')) DEFAULT 'ONGOING',
             current_fen TEXT DEFAULT 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+            white_time REAL DEFAULT 600.0,
+            black_time REAL DEFAULT 600.0,
+            last_move_time TEXT,
             FOREIGN KEY (white_id) REFERENCES Player(player_id),
             FOREIGN KEY (black_id) REFERENCES Player(player_id),
             FOREIGN KEY (winner_id) REFERENCES Player(player_id)
         )
     """)
     
-    # Migration: Add current_fen column if it doesn't exist (for existing databases)
-    try:
-        cur.execute("ALTER TABLE Game ADD COLUMN current_fen TEXT DEFAULT 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'")
-        conn.commit()
-        print("✅ Added current_fen column to existing Game table")
-    except sqlite3.OperationalError:
-        pass  # Column already exists, no need to add
+    # Migration: Add columns if they don't exist (for existing databases)
+    migrations = [
+        ("ALTER TABLE Game ADD COLUMN current_fen TEXT DEFAULT 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'", "current_fen"),
+        ("ALTER TABLE Game ADD COLUMN white_time REAL DEFAULT 600.0", "white_time"),
+        ("ALTER TABLE Game ADD COLUMN black_time REAL DEFAULT 600.0", "black_time"),
+        ("ALTER TABLE Game ADD COLUMN last_move_time TEXT", "last_move_time")
+    ]
+    
+    for sql, col_name in migrations:
+        try:
+            cur.execute(sql)
+            conn.commit()
+            print(f"✅ Added {col_name} column to existing Game table")
+        except sqlite3.OperationalError:
+            pass  # Column already exists, no need to add
     
     # Update existing games that have NULL current_fen
     cur.execute("""
@@ -50,6 +61,11 @@ def init_db():
         SET current_fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
         WHERE current_fen IS NULL
     """)
+
+    # Update existing games to have default time if NULL
+    cur.execute("UPDATE Game SET white_time = 600.0 WHERE white_time IS NULL")
+    cur.execute("UPDATE Game SET black_time = 600.0 WHERE black_time IS NULL")
+
 
     # Bảng Move
     cur.execute("""
