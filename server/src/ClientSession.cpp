@@ -45,6 +45,7 @@ void ClientSession::close() {
 
 void ClientSession::setOpponent(std::shared_ptr<ClientSession> opponent) {
     opponent_ = opponent;
+    inMatch_ = (opponent != nullptr);
 }
 
 std::shared_ptr<ClientSession> ClientSession::getOpponent() const {
@@ -53,4 +54,5 @@ std::shared_ptr<ClientSession> ClientSession::getOpponent() const {
 
 void ClientSession::clearOpponent() {
     opponent_.reset();
+    inMatch_ = false;
 }

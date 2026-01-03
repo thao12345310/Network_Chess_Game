@@ -31,6 +31,18 @@ static std::string get_python_cmd_prefix() {
              #endif
         }
     }
+    // Check if script exists in src/game_logic/ subdirectory
+    {
+        std::string sub = "src/game_logic/logic_wrapper.py";
+        std::ifstream f(sub);
+        if (f.good()) {
+             #ifdef _WIN32
+             return "python " + sub;
+             #else
+             return "python3 " + sub;
+             #endif
+        }
+    }
     
     // Default fallback
     #ifdef _WIN32
@@ -101,6 +113,26 @@ static int get_json_int(const std::string& json, const std::string& key) {
     return std::atoi(json.c_str() + val_start);
 }
 
+static std::string get_json_string(const std::string& json, const std::string& key) {
+    std::string key_str = "\"" + key + "\":";
+    size_t pos = json.find(key_str);
+    if (pos == std::string::npos) {
+         key_str = "\"" + key + "\": "; 
+         pos = json.find(key_str);
+    }
+    if (pos == std::string::npos) return "";
+    
+    size_t val_start = pos + key_str.length();
+    // find start quote
+    size_t quote_start = json.find("\"", val_start);
+    if (quote_start == std::string::npos) return "";
+
+    size_t quote_end = json.find("\"", quote_start + 1);
+    if (quote_end == std::string::npos) return "";
+
+    return json.substr(quote_start + 1, quote_end - quote_start - 1);
+}
+
 std::string NetworkInterface::execute_logic_command(const std::string& request) {
     std::string escaped_request;
     for (char c : request) {
@@ -157,8 +189,27 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
     std::cout << "Received: " << request << std::endl;
 
     // Challenge Logic
-    if (request.find("\"action\": \"challenge\"") != std::string::npos || request.find("\"action\":\"challenge\"") != std::string::npos) {
+    bool is_challenge = false;
+    if (request.find("\"action\": \"challenge\"") != std::string::npos || 
+        request.find("\"action\":\"challenge\"") != std::string::npos ||
+        request.find("\"type\": \"SEND_CHALLENGE\"") != std::string::npos ||
+        request.find("\"type\":\"SEND_CHALLENGE\"") != std::string::npos) {
+        is_challenge = true;
+    }
+
+    if (is_challenge) {
         int target_id = get_json_int(request, "target_id");
+        
+        // Resolve username if target_id is missing
+        if (target_id == 0) {
+            std::string opponent_username = get_json_string(request, "opponent_username");
+            if (!opponent_username.empty()) {
+                 std::string resolve_req = "{\"action\": \"get_player_id\", \"username\": \"" + opponent_username + "\"}";
+                 std::string resolve_res = execute_logic_command(resolve_req);
+                 target_id = get_json_int(resolve_res, "player_id");
+            }
+        }
+
         int sender_id = 0;
         
         {
@@ -169,6 +220,8 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         }
 
         if (sender_id == 0) return "{\"status\": \"error\", \"message\": \"You are not logged in\"}";
+
+        if (target_id == 0) return "{\"status\": \"error\", \"message\": \"Player not found or not specified\"}";
 
         std::lock_guard<std::mutex> lock(session_mutex);
         SOCKET targetSocket = INVALID_SOCKET;
@@ -185,7 +238,7 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
              send(targetSocket, "\n", 1, 0);
              return "{\"status\": \"success\", \"message\": \"Challenge sent\"}";
         } else {
-            return "{\"status\": \"error\", \"message\": \"Player not found\"}";
+            return "{\"status\": \"error\", \"message\": \"Player not found online\"}";
         }
     }
     

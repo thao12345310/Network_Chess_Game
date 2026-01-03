@@ -13,7 +13,7 @@ from db_handler import (
     get_game_fen, update_game_fen, get_current_player_turn, get_game_info,
     get_player_rating, update_both_players_elo, get_game_details,
     add_to_lobby, remove_from_lobby, get_lobby_players, create_game,
-    register_user, verify_user
+    register_user, verify_user, get_player_id_by_username
 )
 import datetime
 
@@ -65,6 +65,14 @@ def main():
             else:
                  response = {"type": "LOGIN_FAILED", "status": "error", "message": "Invalid credentials"}
 
+
+        elif action == 'get_player_id':
+             user = req.get('username')
+             pid = get_player_id_by_username(user)
+             if pid:
+                 response = {"status": "success", "player_id": pid}
+             else:
+                 response = {"status": "error", "message": "User not found"}
         
         elif action == 'game_result':
             fen = req.get('fen')

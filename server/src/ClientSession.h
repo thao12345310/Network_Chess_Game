@@ -28,11 +28,15 @@ public:
     std::shared_ptr<ClientSession> getOpponent() const;
     void clearOpponent();
 
+    void setInMatch(bool inMatch) { inMatch_ = inMatch; }
+    bool isInMatch() const { return inMatch_; }
+
 private:
     int socket_;
     Server* server_;
     std::string username_;
     std::weak_ptr<ClientSession> opponent_;
+    bool inMatch_ = false;
     
     // In a real async server, we would have read buffers here.
     // For this implementation, the Server loop might handle reading, 

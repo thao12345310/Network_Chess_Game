@@ -41,6 +41,17 @@ def verify_user(username, password):
     return None
 
 
+def get_player_id_by_username(username):
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT player_id FROM Player WHERE username = ?", (username,))
+        row = cur.fetchone()
+        if row:
+            return row[0]
+        return None
+    finally:
+        conn.close()
 
 
 def insert_move(game_id, player_id, move_notation):
