@@ -1,4 +1,5 @@
 #include "NetworkInterface.h"
+#include "Protocol.h"
 #include <iostream>
 #include <functional>
 #include <cstdlib>
@@ -188,16 +189,16 @@ std::string NetworkInterface::execute_logic_command(const std::string& request) 
 std::string NetworkInterface::process_request(SOCKET clientSocket, const std::string& request) {
     std::cout << "Received: " << request << std::endl;
 
-    // Challenge Logic
-    bool is_challenge = false;
-    if (request.find("\"action\": \"challenge\"") != std::string::npos || 
-        request.find("\"action\":\"challenge\"") != std::string::npos ||
-        request.find("\"type\": \"SEND_CHALLENGE\"") != std::string::npos ||
-        request.find("\"type\":\"SEND_CHALLENGE\"") != std::string::npos) {
-        is_challenge = true;
-    }
+    std::string type = get_json_string(request, "type");
+    std::string action = get_json_string(request, "action");
+    std::string messageType = get_json_string(request, "messageType");
+    
+    // Normalize type/action
+    if (type.empty()) type = messageType;
+    if (action.empty()) action = type;
 
-    if (is_challenge) {
+    // Matchmaking / Challenge Handling
+    if (type == Protocol::MessageType::CHALLENGE_REQ || action == "challenge" || type == "SEND_CHALLENGE") {
         int target_id = get_json_int(request, "target_id");
         
         // Resolve username if target_id is missing
@@ -233,7 +234,7 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         }
 
         if (targetSocket != INVALID_SOCKET) {
-             std::string msg = "{\"type\": \"challenge_request\", \"from_id\": " + std::to_string(sender_id) + "}";
+             std::string msg = "{\"type\": \"" + std::string(Protocol::MessageType::CHALLENGE_REQ) + "\", \"from_id\": " + std::to_string(sender_id) + "}";
              send(targetSocket, msg.c_str(), static_cast<int>(msg.length()), 0);
              send(targetSocket, "\n", 1, 0);
              return "{\"status\": \"success\", \"message\": \"Challenge sent\"}";
@@ -242,7 +243,8 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         }
     }
     
-    if (request.find("\"action\": \"accept_challenge\"") != std::string::npos || request.find("\"action\":\"accept_challenge\"") != std::string::npos) {
+    // Accept Challenge
+    else if (action == "accept_challenge" || type == "accept_challenge") {
         int challenger_id = get_json_int(request, "challenger_id");
         int my_id = 0;
 
@@ -273,6 +275,7 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         }
 
         if (challengerSocket != INVALID_SOCKET) {
+             // Use Protocol::MessageType::CHALLENGE_RESP or accepted type
              std::string msg = "{\"type\": \"challenge_accepted\", \"game_id\": " + std::to_string(game_id) + ", \"opponent_id\": " + std::to_string(my_id) + ", \"color\": \"white\"}";
              send(challengerSocket, msg.c_str(), static_cast<int>(msg.length()), 0);
              send(challengerSocket, "\n", 1, 0);
@@ -282,7 +285,8 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         return "{\"status\": \"success\", \"type\": \"challenge_accepted\", \"game_id\": " + std::to_string(game_id) + ", \"opponent_id\": " + std::to_string(challenger_id) + ", \"color\": \"black\"}";
     }
 
-    if (request.find("\"action\": \"decline_challenge\"") != std::string::npos || request.find("\"action\":\"decline_challenge\"") != std::string::npos) {
+    // Decline Challenge
+    else if (action == "decline_challenge" || type == "decline_challenge") {
          int challenger_id = get_json_int(request, "challenger_id");
          int my_id = 0;
           {
@@ -309,44 +313,50 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
     }
 
 
+    // Forward logic to Python (AUTH, LOBBY, etc.)
     std::string result = execute_logic_command(request);
 
-    // Network Logic: Intercept successful Lobby actions to update session map
-    if (result.find("\"status\": \"success\"") != std::string::npos) {
-        if (request.find("\"action\": \"join_lobby\"") != std::string::npos || 
-            request.find("\"action\":\"join_lobby\"") != std::string::npos) {
+    // Network Logic: Intercept successful Lobby and Login actions
+    // Check for responseCode: 200 or status: success
+    bool isSuccess = (result.find("\"responseCode\": 200") != std::string::npos) ||
+                     (result.find("\"responseCode\":200") != std::string::npos) ||
+                     (result.find("\"status\": \"success\"") != std::string::npos);
+    
+    if (isSuccess) {
+        std::string resType = get_json_string(result, "messageType");
+        if (resType.empty()) resType = get_json_string(result, "type");
+        
+        if (action == "join_lobby" || type == "join_lobby") {
+            int pid = get_json_int(request, "player_id");
+            if (pid == 0) pid = get_json_int(result, "player_id");
             
-            // Extract player_id (Simple parsing)
-            std::string key = "\"player_id\":";
-            size_t pos = request.find(key);
-            if (pos != std::string::npos) {
-                int pid = std::atoi(request.c_str() + pos + key.length());
-                if (pid > 0) {
-                    std::lock_guard<std::mutex> lock(session_mutex);
-                    client_sessions[clientSocket] = pid;
-                    
-                    if (std::find(ready_players.begin(), ready_players.end(), pid) == ready_players.end()) {
-                        ready_players.push_back(pid);
-                    }
+            if (pid > 0) {
+                std::lock_guard<std::mutex> lock(session_mutex);
+                client_sessions[clientSocket] = pid;
+                if (std::find(ready_players.begin(), ready_players.end(), pid) == ready_players.end()) {
+                    ready_players.push_back(pid);
                 }
             }
         }
-        else if (request.find("\"action\": \"leave_lobby\"") != std::string::npos ||
-                 request.find("\"action\":\"leave_lobby\"") != std::string::npos) {
-            // Extract player_id
-            std::string key = "\"player_id\":";
-            size_t pos = request.find(key);
-            if (pos != std::string::npos) {
-                 int pid = std::atoi(request.c_str() + pos + key.length());
-                 if (pid > 0) {
-                     std::lock_guard<std::mutex> lock(session_mutex);
-                     // Note: We don't remove from client_sessions because they are still connected, just not in lobby
-                     auto it = std::remove(ready_players.begin(), ready_players.end(), pid);
-                     if (it != ready_players.end()) {
-                        ready_players.erase(it, ready_players.end());
-                     }
+        else if (action == "leave_lobby" || type == "leave_lobby") {
+             int pid = get_json_int(request, "player_id");
+             if (pid > 0) {
+                 std::lock_guard<std::mutex> lock(session_mutex);
+                 auto it = std::remove(ready_players.begin(), ready_players.end(), pid);
+                 if (it != ready_players.end()) {
+                    ready_players.erase(it, ready_players.end());
                  }
-            }
+             }
+        }
+        else if (resType == "AUTH_LOGIN_ACK" || resType == "LOGIN_SUCCESS") {
+             // user_id is inside payload now
+             int pid = get_json_int(result, "user_id");
+             if (pid == 0) pid = get_json_int(result, "player_id");
+             if (pid > 0) {
+                 std::cout << "Player logged in: " << pid << " on socket " << clientSocket << std::endl;
+                 std::lock_guard<std::mutex> lock(session_mutex);
+                 client_sessions[clientSocket] = pid;
+             }
         }
     }
 

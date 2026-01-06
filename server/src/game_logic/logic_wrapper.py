@@ -36,8 +36,8 @@ def main():
 
         req = json.loads(input_str)
         
-        # Support both formats: "action" (from test) and "type" (from client)
-        action = req.get('action') or req.get('type')
+        # Support both formats: "action", "type", "messageType"
+        action = req.get('action') or req.get('type') or req.get('messageType')
         response = {}
 
         if action == 'validate_move':
@@ -46,26 +46,46 @@ def main():
             is_valid, next_fen = validate_move(fen, move)
             response = {"status": "success", "is_valid": is_valid, "next_fen": next_fen}
 
-        elif action == 'REGISTER':
-            user = req.get('username')
-            pw = req.get('password')
-            email = req.get('email')
+        elif action == 'REGISTER' or action == 'AUTH_REGISTER_REQ':
+            payload = req.get('payload', {})
+            user = req.get('username') or payload.get('username')
+            pw = req.get('password') or payload.get('password')
+            email = req.get('email') or payload.get('email', '')
             pid = register_user(user, pw, email)
             if pid:
-                response = {"type": "REGISTER_SUCCESS", "status": "success", "player_id": pid}
+                response = {"messageType": "AUTH_REGISTER_ACK", "status": "success", "player_id": pid}
             else:
-                response = {"type": "REGISTER_FAILED", "status": "error", "message": "Username taken or error"}
+                response = {"messageType": "AUTH_REGISTER_ACK", "status": "error", "message": "Username taken or error"}
 
-        elif action == 'LOGIN':
-            user = req.get('username')
-            pw = req.get('password')
+        if action == 'LOGIN' or action == 'AUTH_LOGIN_REQ':
+            payload = req.get('payload', {})
+            # Try top level, then payload
+            user = req.get('username') or payload.get('username')
+            pw = req.get('password') or payload.get('password')
+            
             pid = verify_user(user, pw)
             if pid:
-                 # In a real app we would generate a token. Here we use pid as token for simplicity or generate a dummy one.
-                 token = f"sess_{pid}"
-                 response = {"type": "LOGIN_SUCCESS", "status": "success", "player_id": pid, "session_token": token, "username": user}
+                 # Get player elo
+                 elo = get_player_rating(pid)
+                 # Return AUTH_LOGIN_ACK matching Protocol spec
+                 response = {
+                     "messageType": "AUTH_LOGIN_ACK",
+                     "responseCode": 200,
+                     "payload": {
+                         "user_id": pid,
+                         "username": user,
+                         "elo": elo,
+                         "session_token": f"sess_{pid}"
+                     }
+                 }
             else:
-                 response = {"type": "LOGIN_FAILED", "status": "error", "message": "Invalid credentials"}
+                 response = {
+                     "messageType": "AUTH_LOGIN_ACK",
+                     "responseCode": 401,
+                     "payload": {
+                         "reason": "Invalid credentials"
+                     }
+                 }
 
 
         elif action == 'get_player_id':

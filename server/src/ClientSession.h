@@ -23,6 +23,9 @@ public:
     void setUsername(const std::string& name) { username_ = name; }
     
     bool isAuthorized() const { return !username_.empty(); }
+    
+    int getPlayerId() const { return playerId_; }
+    void setPlayerId(int pid) { playerId_ = pid; }
 
     void setOpponent(std::shared_ptr<ClientSession> opponent);
     std::shared_ptr<ClientSession> getOpponent() const;
@@ -44,6 +47,7 @@ private:
     // Given the requirements "Multiple clients (use select, poll, or multithreading)",
     // I will implement a read method that can be called by the Server when data is available.
     
+    int playerId_ = 0;
     std::mutex sessionMutex_;
 };
 
