@@ -90,6 +90,17 @@ bool GameClient::requestPlayerList()
     return netClient->sendMessage(msg);
 }
 
+bool GameClient::joinLobby()
+{
+    if (currentPlayerId == 0) return false;
+
+    Json::Value msg;
+    msg["type"] = "join_lobby";
+    msg["player_id"] = currentPlayerId;
+    
+    return netClient->sendMessage(msg);
+}
+
 bool GameClient::sendChallenge(const std::string &opponentUsername)
 {
     Json::Value msg;
@@ -234,6 +245,11 @@ void GameClient::processMessage(const Json::Value &msg)
     if (msg.isMember("game_id"))
     {
         currentGameId = msg["game_id"].asString();
+    }
+
+    if (msg.isMember("player_id"))
+    {
+        currentPlayerId = msg["player_id"].asInt();
     }
 
     // Route to appropriate callback

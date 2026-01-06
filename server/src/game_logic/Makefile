@@ -11,8 +11,8 @@ endif
 
 all: $(TARGET)
 
-$(TARGET): main.cpp NetworkInterface.cpp StreamServer.cpp
-	g++ -o $(TARGET) main.cpp NetworkInterface.cpp StreamServer.cpp $(LIBS)
+$(TARGET): main.cpp NetworkInterface.cpp ../StreamServer.cpp
+	g++ -o $(TARGET) main.cpp NetworkInterface.cpp ../StreamServer.cpp -I.. $(LIBS)
 
 clean:
 	$(RM) $(TARGET)

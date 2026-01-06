@@ -27,6 +27,10 @@ private:
     std::mutex session_mutex;
     std::map<SOCKET, int> client_sessions; // Socket -> PlayerID
     std::vector<int> ready_players; // Just IDs for now
+
+    // Helper for executing Python logic
+    std::string execute_logic_command(const std::string& json_input);
+
 };
 
 #endif // NETWORK_INTERFACE_H
