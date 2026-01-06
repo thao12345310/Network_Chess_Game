@@ -12,7 +12,12 @@ from db_handler import (
     insert_move, get_moves, update_player_elo, update_game_result,
     get_game_fen, update_game_fen, get_current_player_turn, get_game_info,
     get_player_rating, update_both_players_elo, get_game_details,
+<<<<<<< HEAD
     add_to_lobby, remove_from_lobby, get_lobby_players,
+=======
+    add_to_lobby, remove_from_lobby, get_lobby_players, create_game,
+    register_user, verify_user, get_player_id_by_username,
+>>>>>>> 3fc3694c0416e018c2d9f0aef4524bf7d81fb8bc
     get_game_time, update_game_time, create_game
 )
 import datetime
