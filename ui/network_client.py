@@ -137,8 +137,15 @@ class ChessClient:
     def _on_login_callback(self, json_msg):
         """Handle login response from C++"""
         try:
+            if json_msg is None:
+                print("ERROR: json_msg is None in login callback")
+                return
+            
+            print(f"DEBUG: Received login callback: {json_msg}")
             msg = json.loads(json_msg.decode('utf-8'))
+            print(f"DEBUG: Parsed message: {msg}")
             msg_type = msg.get('messageType', '')
+            print(f"DEBUG: Message type: {msg_type}")
             
             # Handle both login and register responses
             if msg_type in self.callbacks:
@@ -147,8 +154,12 @@ class ChessClient:
                 self.callbacks['AUTH_LOGIN_ACK'](msg)
             elif 'AUTH_REGISTER_ACK' in self.callbacks and 'AUTH' in msg_type:
                 self.callbacks['AUTH_REGISTER_ACK'](msg)
+            else:
+                print(f"WARNING: No callback registered for message type: {msg_type}")
         except Exception as e:
+            import traceback
             print(f"Login callback error: {e}")
+            print(f"Traceback: {traceback.format_exc()}")
     
     def _on_game_update_callback(self, json_msg):
         """Handle game update from C++"""

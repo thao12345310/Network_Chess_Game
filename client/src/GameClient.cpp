@@ -43,10 +43,9 @@ void GameClient::disconnect()
 bool GameClient::login(const std::string &username, const std::string &password)
 {
     Json::Value msg;
-    msg["type"] = "LOGIN";
-    msg["username"] = username;
-    msg["password"] = password;
-    // msg["timestamp"] = static_cast<int>(std::time(nullptr));
+    msg["messageType"] = "AUTH_LOGIN_REQ";
+    msg["payload"]["username"] = username;
+    msg["payload"]["password"] = password;
 
     if (netClient->sendMessage(msg))
     {
@@ -61,11 +60,10 @@ bool GameClient::registerAccount(const std::string &username,
                                  const std::string &email)
 {
     Json::Value msg;
-    msg["type"] = "REGISTER";
-    msg["username"] = username;
-    msg["password"] = password;
-    msg["email"] = email;
-    // msg["timestamp"] = static_cast<int>(std::time(nullptr));
+    msg["messageType"] = "AUTH_REGISTER_REQ";
+    msg["payload"]["username"] = username;
+    msg["payload"]["password"] = password;
+    msg["payload"]["email"] = email;
 
     return netClient->sendMessage(msg);
 }
@@ -73,8 +71,8 @@ bool GameClient::registerAccount(const std::string &username,
 void GameClient::logout()
 {
     Json::Value msg;
-    msg["type"] = "LOGOUT";
-    msg["session_token"] = netClient->getSessionToken();
+    msg["messageType"] = "AUTH_LOGOUT_REQ";
+    msg["payload"] = Json::Value(Json::objectValue);
 
     netClient->sendMessage(msg);
     currentUsername.clear();
@@ -84,50 +82,47 @@ void GameClient::logout()
 bool GameClient::requestPlayerList()
 {
     Json::Value msg;
-    msg["type"] = "GET_PLAYER_LIST";
-    // msg["session_token"] = netClient->getSessionToken();
+    msg["messageType"] = "LOBBY_LIST";
+    msg["payload"] = Json::Value(Json::objectValue);
 
     return netClient->sendMessage(msg);
 }
 
 bool GameClient::joinLobby()
 {
-    if (currentPlayerId == 0) return false;
-
     Json::Value msg;
-    msg["type"] = "join_lobby";
-    msg["player_id"] = currentPlayerId;
-    
+    msg["messageType"] = "MATCH_FIND_REQ";
+    msg["payload"]["mode"] = "random";
+
     return netClient->sendMessage(msg);
 }
 
 bool GameClient::sendChallenge(const std::string &opponentUsername)
 {
+    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["type"] = "SEND_CHALLENGE";
-    msg["opponent_username"] = opponentUsername;
-    // msg["session_token"] = netClient->getSessionToken();
-    // msg["timestamp"] = static_cast<int>(std::time(nullptr));
+    msg["messageType"] = "CHALLENGE_SEND";
+    msg["payload"]["opponent_username"] = opponentUsername;
 
     return netClient->sendMessage(msg);
 }
 
 bool GameClient::acceptChallenge(const std::string &challengeId)
 {
+    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["type"] = "ACCEPT_CHALLENGE";
-    msg["challenge_id"] = challengeId;
-    //msg["session_token"] = netClient->getSessionToken();
+    msg["messageType"] = "CHALLENGE_ACCEPT";
+    msg["payload"]["challenge_id"] = challengeId;
 
     return netClient->sendMessage(msg);
 }
 
 bool GameClient::declineChallenge(const std::string &challengeId)
 {
+    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["type"] = "DECLINE_CHALLENGE";
-    msg["challenge_id"] = challengeId;
-    //msg["session_token"] = netClient->getSessionToken();
+    msg["messageType"] = "CHALLENGE_DECLINE";
+    msg["payload"]["challenge_id"] = challengeId;
 
     return netClient->sendMessage(msg);
 }
@@ -135,71 +130,70 @@ bool GameClient::declineChallenge(const std::string &challengeId)
 bool GameClient::sendMove(const std::string &fromPos, const std::string &toPos)
 {
     Json::Value msg;
-    msg["type"] = "MOVE";
-    msg["game_id"] = currentGameId;
-    msg["from"] = fromPos;
-    msg["to"] = toPos;
-    // msg["session_token"] = netClient->getSessionToken();
-    // msg["timestamp"] = static_cast<int>(std::time(nullptr));
+    msg["messageType"] = "MOVE_REQ";
+    msg["payload"]["from"] = fromPos;
+    msg["payload"]["to"] = toPos;
+    msg["payload"]["promotion"] = Json::Value::null;
 
     return netClient->sendMessage(msg);
 }
 
 bool GameClient::offerDraw()
 {
+    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["type"] = "OFFER_DRAW";
-    msg["game_id"] = currentGameId;
-    //msg["session_token"] = netClient->getSessionToken();
+    msg["messageType"] = "DRAW_OFFER";
+    msg["payload"]["game_id"] = currentGameId;
 
     return netClient->sendMessage(msg);
 }
 
 bool GameClient::acceptDraw()
 {
+    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["type"] = "ACCEPT_DRAW";
-    msg["game_id"] = currentGameId;
-    msg["session_token"] = netClient->getSessionToken();
+    msg["messageType"] = "DRAW_ACCEPT";
+    msg["payload"]["game_id"] = currentGameId;
 
     return netClient->sendMessage(msg);
 }
 
 bool GameClient::declineDraw()
 {
+    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["type"] = "DECLINE_DRAW";
-    msg["game_id"] = currentGameId;
-    msg["session_token"] = netClient->getSessionToken();
+    msg["messageType"] = "DRAW_DECLINE";
+    msg["payload"]["game_id"] = currentGameId;
 
     return netClient->sendMessage(msg);
 }
 
 bool GameClient::resign()
 {
+    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["type"] = "RESIGN";
-    msg["game_id"] = currentGameId;
-    msg["session_token"] = netClient->getSessionToken();
+    msg["messageType"] = "GAME_RESIGN";
+    msg["payload"]["game_id"] = currentGameId;
 
     return netClient->sendMessage(msg);
 }
 
 bool GameClient::requestRematch()
 {
+    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["type"] = "REQUEST_REMATCH";
-    msg["game_id"] = currentGameId;
-    msg["session_token"] = netClient->getSessionToken();
+    msg["messageType"] = "MATCH_REMATCH_REQ";
+    msg["payload"]["game_id"] = currentGameId;
 
     return netClient->sendMessage(msg);
 }
 
 bool GameClient::requestMatchHistory()
 {
+    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["type"] = "GET_MATCH_HISTORY";
-    msg["session_token"] = netClient->getSessionToken();
+    msg["messageType"] = "MATCH_HISTORY_REQ";
+    msg["payload"] = Json::Value(Json::objectValue);
 
     return netClient->sendMessage(msg);
 }
@@ -228,56 +222,45 @@ void GameClient::receiveLoop()
 
 void GameClient::processMessage(const Json::Value &msg)
 {
-    if (!msg.isMember("type"))
+    // Server uses "messageType" instead of "type"
+    if (!msg.isMember("messageType"))
     {
         return;
     }
 
-    std::string type = msg["type"].asString();
+    std::string type = msg["messageType"].asString();
 
-    // Handle session token
-    if (msg.isMember("session_token"))
+    // Handle payload data
+    Json::Value payload = msg.isMember("payload") ? msg["payload"] : Json::Value();
+
+    // Handle game_id from payload
+    if (payload.isMember("game_id"))
     {
-        netClient->setSessionToken(msg["session_token"].asString());
+        currentGameId = std::to_string(payload["game_id"].asInt());
     }
 
-    // Handle game_id
-    if (msg.isMember("game_id"))
+    if (payload.isMember("user_id"))
     {
-        currentGameId = msg["game_id"].asString();
-    }
-
-    if (msg.isMember("player_id"))
-    {
-        currentPlayerId = msg["player_id"].asInt();
+        currentPlayerId = payload["user_id"].asInt();
     }
 
     // Route to appropriate callback
-    if (type == "LOGIN_SUCCESS" || type == "LOGIN_FAILED" ||
-        type == "REGISTER_SUCCESS" || type == "REGISTER_FAILED")
+    if (type == "AUTH_LOGIN_ACK" || type == "AUTH_REGISTER_ACK")
     {
         if (onLoginResponse)
         {
             onLoginResponse(msg);
         }
     }
-    else if (type == "GAME_UPDATE" || type == "GAME_START" ||
-             type == "GAME_END" || type == "MOVE_RESULT")
+    else if (type == "MOVE_UPDATE" || type == "MOVE_ACK" ||
+             type == "MATCH_START" || type == "GAME_END")
     {
         if (onGameUpdate)
         {
             onGameUpdate(msg);
         }
     }
-    else if (type == "CHALLENGE_RECEIVED" || type == "CHALLENGE_ACCEPTED" ||
-             type == "CHALLENGE_DECLINED")
-    {
-        if (onChallengeReceived)
-        {
-            onChallengeReceived(msg);
-        }
-    }
-    else if (type == "PLAYER_LIST")
+    else if (type == "LOBBY_LIST")
     {
         if (onPlayerListUpdate)
         {
@@ -288,7 +271,7 @@ void GameClient::processMessage(const Json::Value &msg)
     {
         if (onError)
         {
-            std::string errorMsg = msg.isMember("message") ? msg["message"].asString() : "Unknown error";
+            std::string errorMsg = payload.isMember("reason") ? payload["reason"].asString() : "Unknown error";
             onError(errorMsg);
         }
     }
@@ -348,7 +331,7 @@ std::string GameClient::getCurrentGameId() const
     return currentGameId;
 }
 
-void GameClient::setGameId(const std::string& gameId)
+void GameClient::setGameId(const std::string &gameId)
 {
     currentGameId = gameId;
 }

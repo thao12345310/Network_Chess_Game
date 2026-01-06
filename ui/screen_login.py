@@ -236,25 +236,35 @@ class LoginScreen:
     
     def on_login_response(self, msg):
         """Handle login response"""
+        if msg is None:
+            messagebox.showerror("Error", "No response from server")
+            return
+        
+        print(f"DEBUG on_login_response: {msg}")
         response_code = msg.get('responseCode', 0)
-        payload = msg.get('payload', {})
+        payload = msg.get('payload') or {}  # Handle None payload
         
         if response_code == 200:
             # Success
             self.client.username = self.username_entry.get()
-            elo = payload.get('elo', 1200)
+            elo = payload.get('elo', 1200) if isinstance(payload, dict) else 1200
             
             messagebox.showinfo("Success", f"Welcome {self.client.username}!\nELO: {elo}")
             self.on_login_success(elo)
         else:
             # Error
-            reason = payload.get('reason', 'Login failed')
+            reason = payload.get('reason', 'Login failed') if isinstance(payload, dict) else 'Login failed'
             messagebox.showerror("Login Failed", f"Error {response_code}: {reason}")
     
     def on_register_response(self, msg):
         """Handle register response"""
+        if msg is None:
+            messagebox.showerror("Error", "No response from server")
+            return
+        
+        print(f"DEBUG on_register_response: {msg}")
         response_code = msg.get('responseCode', 0)
-        payload = msg.get('payload', {})
+        payload = msg.get('payload') or {}  # Handle None payload
         
         if response_code == 201:
             # Success (Created)
@@ -262,7 +272,7 @@ class LoginScreen:
             self.toggle_mode()
         else:
             # Error
-            reason = payload.get('reason', 'Registration failed')
+            reason = payload.get('reason', 'Registration failed') if isinstance(payload, dict) else 'Registration failed'
             messagebox.showerror("Registration Failed", f"Error {response_code}: {reason}")
     
     def show(self):
