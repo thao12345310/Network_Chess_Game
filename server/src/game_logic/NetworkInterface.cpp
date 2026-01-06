@@ -234,37 +234,192 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         }
 
         if (targetSocket != INVALID_SOCKET) {
-             std::string msg = "{\"type\": \"" + std::string(Protocol::MessageType::CHALLENGE_REQ) + "\", \"from_id\": " + std::to_string(sender_id) + "}";
+             // Send CHALLENGE_NOTIFY to target player with proper format
+             std::string msg = "{\"messageType\": \"CHALLENGE_NOTIFY\", \"responseCode\": 200, \"payload\": {"
+                               "\"from_id\": " + std::to_string(sender_id) + ", "
+                               "\"challenger_id\": " + std::to_string(sender_id) + "}}";
              send(targetSocket, msg.c_str(), static_cast<int>(msg.length()), 0);
              send(targetSocket, "\n", 1, 0);
-             return "{\"status\": \"success\", \"message\": \"Challenge sent\"}";
+             return "{\"messageType\": \"CHALLENGE_REQ\", \"responseCode\": 200, \"payload\": {\"status\": \"sent\"}}";
         } else {
-            return "{\"status\": \"error\", \"message\": \"Player not found online\"}";
+            return "{\"messageType\": \"ERROR\", \"responseCode\": 404, \"payload\": {\"reason\": \"Player not found online\"}}";
         }
     }
     
-    // Accept Challenge
-    else if (action == "accept_challenge" || type == "accept_challenge") {
-        int challenger_id = get_json_int(request, "challenger_id");
+    // MATCH_FIND_REQ - Random Matchmaking
+    else if (type == "MATCH_FIND_REQ" || action == "MATCH_FIND_REQ") {
         int my_id = 0;
-
-         {
+        {
             std::lock_guard<std::mutex> lock(session_mutex);
             if (client_sessions.find(clientSocket) != client_sessions.end()) {
                 my_id = client_sessions[clientSocket];
             }
         }
         
-        // 1. Create Game
-        std::string create_req = "{\"action\": \"create_game\", \"white_id\": " + std::to_string(challenger_id) + ", \"black_id\": " + std::to_string(my_id) + "}";
+        if (my_id == 0) {
+            return "{\"messageType\": \"ERROR\", \"responseCode\": 401, \"payload\": {\"reason\": \"Not logged in\"}}";
+        }
+        
+        std::lock_guard<std::mutex> lock(session_mutex);
+        
+        // Check if already in queue
+        if (std::find(matchmaking_queue.begin(), matchmaking_queue.end(), my_id) != matchmaking_queue.end()) {
+            return "{\"messageType\": \"MATCH_FIND_ACK\", \"responseCode\": 200, \"payload\": {\"status\": \"waiting\"}}";
+        }
+        
+        // Add to queue
+        matchmaking_queue.push_back(my_id);
+        std::cout << "Player " << my_id << " joined matchmaking queue. Queue size: " << matchmaking_queue.size() << std::endl;
+        
+        // Check if we have 2 players to match
+        if (matchmaking_queue.size() >= 2) {
+            int player1_id = matchmaking_queue[0];
+            int player2_id = matchmaking_queue[1];
+            
+            // Remove from queue
+            matchmaking_queue.erase(matchmaking_queue.begin(), matchmaking_queue.begin() + 2);
+            
+            // Create game via Python
+            std::string create_req = "{\"action\": \"create_game\", \"white_id\": " + std::to_string(player1_id) + 
+                                     ", \"black_id\": " + std::to_string(player2_id) + ", \"mode\": \"RAPID\"}";
+            std::string create_res = execute_logic_command(create_req);
+            int game_id = get_json_int(create_res, "game_id");
+            
+            if (game_id == 0) {
+                // Put players back in queue
+                matchmaking_queue.insert(matchmaking_queue.begin(), player2_id);
+                matchmaking_queue.insert(matchmaking_queue.begin(), player1_id);
+                return "{\"messageType\": \"ERROR\", \"responseCode\": 500, \"payload\": {\"reason\": \"Failed to create game\"}}";
+            }
+            
+            // Find sockets for both players
+            SOCKET socket1 = INVALID_SOCKET, socket2 = INVALID_SOCKET;
+            for (auto const& [sock, pid] : client_sessions) {
+                if (pid == player1_id) socket1 = sock;
+                if (pid == player2_id) socket2 = sock;
+            }
+            
+            // Send MATCH_START to player1 (white)
+            if (socket1 != INVALID_SOCKET) {
+                std::string msg1 = "{\"messageType\": \"MATCH_START\", \"responseCode\": 200, \"payload\": {"
+                                   "\"game_id\": " + std::to_string(game_id) + ", "
+                                   "\"opponent_id\": " + std::to_string(player2_id) + ", "
+                                   "\"your_color\": \"white\", "
+                                   "\"time_control\": \"10+0\"}}";
+                send(socket1, msg1.c_str(), static_cast<int>(msg1.length()), 0);
+                send(socket1, "\n", 1, 0);
+            }
+            
+            // Send MATCH_START to player2 (black)
+            if (socket2 != INVALID_SOCKET) {
+                std::string msg2 = "{\"messageType\": \"MATCH_START\", \"responseCode\": 200, \"payload\": {"
+                                   "\"game_id\": " + std::to_string(game_id) + ", "
+                                   "\"opponent_id\": " + std::to_string(player1_id) + ", "
+                                   "\"your_color\": \"black\", "
+                                   "\"time_control\": \"10+0\"}}";
+                send(socket2, msg2.c_str(), static_cast<int>(msg2.length()), 0);
+                send(socket2, "\n", 1, 0);
+            }
+            
+            std::cout << "Match created! Game " << game_id << ": Player " << player1_id << " (white) vs Player " << player2_id << " (black)" << std::endl;
+            
+            // Return acknowledgment to the requesting client
+            return "{\"messageType\": \"MATCH_START\", \"responseCode\": 200, \"payload\": {"
+                   "\"game_id\": " + std::to_string(game_id) + ", "
+                   "\"opponent_id\": " + std::to_string(my_id == player1_id ? player2_id : player1_id) + ", "
+                   "\"your_color\": \"" + std::string(my_id == player1_id ? "white" : "black") + "\", "
+                   "\"time_control\": \"10+0\"}}";
+        }
+        
+        // Still waiting for opponent
+        return "{\"messageType\": \"MATCH_FIND_ACK\", \"responseCode\": 200, \"payload\": {\"status\": \"waiting\", \"message\": \"Waiting for opponent...\"}}";
+    }
+    
+    // LOBBY_LIST - Get list of online players
+    else if (type == "LOBBY_LIST" || action == "LOBBY_LIST") {
+        // Get players from Python (database)
+        std::string list_res = execute_logic_command("{\"action\": \"get_ready_players\"}");
+        std::cout << "LOBBY_LIST Python response: " << list_res << std::endl;
+        
+        // The response from Python has players array, reformat for protocol
+        // For now, just forward the response but wrap it properly
+        // Extract the players array from the response
+        size_t players_start = list_res.find("\"players\":");
+        if (players_start != std::string::npos) {
+            size_t arr_start = list_res.find("[", players_start);
+            size_t arr_end = list_res.find("]", arr_start);
+            if (arr_start != std::string::npos && arr_end != std::string::npos) {
+                std::string players_arr = list_res.substr(arr_start, arr_end - arr_start + 1);
+                std::string response = "{\"messageType\": \"LOBBY_LIST\", \"responseCode\": 200, \"payload\": {\"players\": " + players_arr + "}}";
+                std::cout << "LOBBY_LIST response: " << response << std::endl;
+                return response;
+            }
+        }
+        
+        // Fallback - return empty list
+        std::cout << "LOBBY_LIST returning empty list (fallback)" << std::endl;
+        return "{\"messageType\": \"LOBBY_LIST\", \"responseCode\": 200, \"payload\": {\"players\": []}}";
+    }
+    
+    // Accept/Decline Challenge - Handle both old format and new CHALLENGE_RESP format
+    else if (action == "accept_challenge" || type == "accept_challenge" || 
+             type == "CHALLENGE_RESP" || action == "CHALLENGE_RESP") {
+        
+        // Check if this is accept or decline
+        std::string accepted_str = get_json_string(request, "accepted");
+        bool is_accepted = (accepted_str == "true" || accepted_str.empty()); // Default to accept if not specified
+        
+        // Also check payload.accepted for nested format
+        if (request.find("\"accepted\": false") != std::string::npos || 
+            request.find("\"accepted\":false") != std::string::npos) {
+            is_accepted = false;
+        }
+        
+        // Get challenger ID - try multiple fields
+        int challenger_id = get_json_int(request, "challenger_id");
+        if (challenger_id == 0) challenger_id = get_json_int(request, "from_id");
+        if (challenger_id == 0) challenger_id = get_json_int(request, "challenge_id"); // Sometimes challenge_id is the sender's ID
+        
+        int my_id = 0;
+        {
+            std::lock_guard<std::mutex> lock(session_mutex);
+            if (client_sessions.find(clientSocket) != client_sessions.end()) {
+                my_id = client_sessions[clientSocket];
+            }
+        }
+        
+        if (challenger_id == 0) {
+            return "{\"messageType\": \"ERROR\", \"responseCode\": 400, \"payload\": {\"reason\": \"Missing challenger_id\"}}";
+        }
+        
+        if (!is_accepted) {
+            // Decline challenge
+            std::lock_guard<std::mutex> lock(session_mutex);
+            SOCKET challengerSocket = INVALID_SOCKET;
+            for (auto const& [sock, pid] : client_sessions) {
+                if (pid == challenger_id) {
+                    challengerSocket = sock;
+                    break;
+                }
+            }
+            if (challengerSocket != INVALID_SOCKET) {
+                std::string msg = "{\"messageType\": \"CHALLENGE_RESP\", \"responseCode\": 200, \"payload\": {\"accepted\": false, \"from_id\": " + std::to_string(my_id) + "}}";
+                send(challengerSocket, msg.c_str(), static_cast<int>(msg.length()), 0);
+                send(challengerSocket, "\n", 1, 0);
+            }
+            return "{\"messageType\": \"CHALLENGE_RESP\", \"responseCode\": 200, \"payload\": {\"status\": \"declined\"}}";
+        }
+        
+        // Accept challenge - Create Game
+        std::string create_req = "{\"action\": \"create_game\", \"white_id\": " + std::to_string(challenger_id) + ", \"black_id\": " + std::to_string(my_id) + ", \"mode\": \"RAPID\"}";
         std::string create_res = execute_logic_command(create_req);
         
         int game_id = get_json_int(create_res, "game_id");
         if (game_id == 0) {
-             return "{\"status\": \"error\", \"message\": \"Failed to create game\"}";
+             return "{\"messageType\": \"ERROR\", \"responseCode\": 500, \"payload\": {\"reason\": \"Failed to create game\"}}";
         }
 
-        // 2. Notify Challenger
+        // Notify Challenger with MATCH_START
         std::lock_guard<std::mutex> lock(session_mutex);
         SOCKET challengerSocket = INVALID_SOCKET;
         for (auto const& [sock, pid] : client_sessions) {
@@ -275,14 +430,23 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         }
 
         if (challengerSocket != INVALID_SOCKET) {
-             // Use Protocol::MessageType::CHALLENGE_RESP or accepted type
-             std::string msg = "{\"type\": \"challenge_accepted\", \"game_id\": " + std::to_string(game_id) + ", \"opponent_id\": " + std::to_string(my_id) + ", \"color\": \"white\"}";
+             std::string msg = "{\"messageType\": \"MATCH_START\", \"responseCode\": 200, \"payload\": {"
+                               "\"game_id\": " + std::to_string(game_id) + ", "
+                               "\"opponent_id\": " + std::to_string(my_id) + ", "
+                               "\"your_color\": \"white\", "
+                               "\"time_control\": \"10+0\"}}";
              send(challengerSocket, msg.c_str(), static_cast<int>(msg.length()), 0);
              send(challengerSocket, "\n", 1, 0);
         }
 
-        // 3. Return to Acceptor
-        return "{\"status\": \"success\", \"type\": \"challenge_accepted\", \"game_id\": " + std::to_string(game_id) + ", \"opponent_id\": " + std::to_string(challenger_id) + ", \"color\": \"black\"}";
+        std::cout << "Challenge accepted! Game " << game_id << ": Player " << challenger_id << " (white) vs Player " << my_id << " (black)" << std::endl;
+
+        // Return MATCH_START to Acceptor
+        return "{\"messageType\": \"MATCH_START\", \"responseCode\": 200, \"payload\": {"
+               "\"game_id\": " + std::to_string(game_id) + ", "
+               "\"opponent_id\": " + std::to_string(challenger_id) + ", "
+               "\"your_color\": \"black\", "
+               "\"time_control\": \"10+0\"}}";
     }
 
     // Decline Challenge
@@ -354,8 +518,15 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
              if (pid == 0) pid = get_json_int(result, "player_id");
              if (pid > 0) {
                  std::cout << "Player logged in: " << pid << " on socket " << clientSocket << std::endl;
-                 std::lock_guard<std::mutex> lock(session_mutex);
-                 client_sessions[clientSocket] = pid;
+                 {
+                     std::lock_guard<std::mutex> lock(session_mutex);
+                     client_sessions[clientSocket] = pid;
+                 }
+                 
+                 // Automatically add player to lobby
+                 std::string join_req = "{\"action\": \"join_lobby\", \"player_id\": " + std::to_string(pid) + "}";
+                 execute_logic_command(join_req);
+                 std::cout << "Player " << pid << " added to lobby" << std::endl;
              }
         }
     }

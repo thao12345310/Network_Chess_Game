@@ -26,7 +26,8 @@ private:
     // In-memory session tracking
     std::mutex session_mutex;
     std::map<SOCKET, int> client_sessions; // Socket -> PlayerID
-    std::vector<int> ready_players; // Just IDs for now
+    std::vector<int> ready_players; // Players in lobby
+    std::vector<int> matchmaking_queue; // Players waiting for random match
 
     // Helper for executing Python logic
     std::string execute_logic_command(const std::string& json_input);
