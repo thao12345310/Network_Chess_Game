@@ -18,6 +18,7 @@ struct ClientWrapper
     CMessageCallback loginCallback;
     CMessageCallback gameUpdateCallback;
     CMessageCallback playerListCallback;
+    CMessageCallback challengeCallback;
     CErrorCallback errorCallback;
 
     ClientWrapper(const std::string &ip, int port)
@@ -25,6 +26,7 @@ struct ClientWrapper
           loginCallback(nullptr),
           gameUpdateCallback(nullptr),
           playerListCallback(nullptr),
+          challengeCallback(nullptr),
           errorCallback(nullptr) {}
 
     ~ClientWrapper()
@@ -142,6 +144,23 @@ extern "C"
         } });
     }
 
+    void client_set_challenge_callback(ClientHandle handle, CMessageCallback callback)
+    {
+        if (!handle)
+            return;
+        ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
+        wrapper->challengeCallback = callback;
+
+        wrapper->client->setChallengeCallback([handle, callback](const Json::Value &msg)
+                                              {
+        if (callback) {
+            Json::StreamWriterBuilder writer;
+            writer["indentation"] = "";
+            std::string msgStr = Json::writeString(writer, msg);
+            callback(msgStr.c_str());
+        } });
+    }
+
     void client_set_error_callback(ClientHandle handle, CErrorCallback callback)
     {
         if (!handle)
@@ -202,6 +221,22 @@ extern "C"
             return 0;
         // Using sendChallenge as proxy for matchmaking
         return 1; // Stub - implement actual matchmaking
+    }
+
+    int client_send_challenge(ClientHandle handle, const char *opponentUsername)
+    {
+        if (!handle || !opponentUsername)
+            return 0;
+        ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
+        return wrapper->client->sendChallenge(opponentUsername) ? 1 : 0;
+    }
+
+    int client_accept_challenge(ClientHandle handle, const char *challengerId)
+    {
+        if (!handle || !challengerId)
+            return 0;
+        ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
+        return wrapper->client->acceptChallenge(challengerId) ? 1 : 0;
     }
 
     int client_send_move(ClientHandle handle, const char *fromPos, const char *toPos)

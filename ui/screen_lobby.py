@@ -193,10 +193,12 @@ class LobbyScreen:
         # Auto refresh players on show
         self.refresh_players()
     
+    
     def setup_callbacks(self):
         """Setup network callbacks"""
         self.client.set_callback('LOBBY_LIST', self.on_player_list)
         self.client.set_callback('MATCH_START', self.on_game_start_msg)
+        self.client.set_callback('CHALLENGE_NOTIFY', self.on_challenge_received)
     
     def refresh_players(self):
         """Refresh player list"""
@@ -287,6 +289,35 @@ class LobbyScreen:
         self.log(f"Game starting vs {opponent}!")
         self.hide()
         self.on_game_start(game_id, opponent, your_color, opponent_elo)
+    
+    def on_challenge_received(self, msg):
+        """Handle incoming challenge from another player"""
+        payload = msg.get('payload', {})
+        challenger_id = payload.get('challenger_id') or payload.get('from_id')
+        
+        # Find challenger username from players_data
+        challenger_name = f"Player {challenger_id}"
+        for player in self.players_data:
+            if player.get('player_id') == challenger_id:
+                challenger_name = player.get('username', challenger_name)
+                break
+        
+        self.log(f"Challenge received from {challenger_name}!")
+        
+        # Show accept/decline dialog
+        result = messagebox.askyesno(
+            "Challenge Received!",
+            f"⚔️ {challenger_name} wants to play chess with you!\n\nDo you accept the challenge?",
+            icon='question'
+        )
+        
+        if result:
+            # Accept challenge
+            self.client.accept_challenge(str(challenger_id))
+            self.log(f"Accepted challenge from {challenger_name}")
+        else:
+            # Decline - just don't respond (or send decline)
+            self.log(f"Declined challenge from {challenger_name}")
     
     def log(self, message):
         """Add message to log"""

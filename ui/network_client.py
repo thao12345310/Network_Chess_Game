@@ -65,6 +65,9 @@ class ChessClient:
         lib.client_set_player_list_callback.argtypes = [ctypes.c_void_p, self.MessageCallbackType]
         lib.client_set_player_list_callback.restype = None
         
+        lib.client_set_challenge_callback.argtypes = [ctypes.c_void_p, self.MessageCallbackType]
+        lib.client_set_challenge_callback.restype = None
+        
         lib.client_set_error_callback.argtypes = [ctypes.c_void_p, self.ErrorCallbackType]
         lib.client_set_error_callback.restype = None
         
@@ -89,6 +92,13 @@ class ChessClient:
         
         lib.client_offer_draw.argtypes = [ctypes.c_void_p]
         lib.client_offer_draw.restype = ctypes.c_int
+        
+        # Challenge functions
+        lib.client_send_challenge.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.client_send_challenge.restype = ctypes.c_int
+        
+        lib.client_accept_challenge.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.client_accept_challenge.restype = ctypes.c_int
         
     def connect(self):
         """Connect to server"""
@@ -127,11 +137,13 @@ class ChessClient:
         self._cb_login = self.MessageCallbackType(self._on_login_callback)
         self._cb_game_update = self.MessageCallbackType(self._on_game_update_callback)
         self._cb_player_list = self.MessageCallbackType(self._on_player_list_callback)
+        self._cb_challenge = self.MessageCallbackType(self._on_challenge_callback)
         self._cb_error = self.ErrorCallbackType(self._on_error_callback)
         
         self.lib.client_set_login_callback(self.handle, self._cb_login)
         self.lib.client_set_game_update_callback(self.handle, self._cb_game_update)
         self.lib.client_set_player_list_callback(self.handle, self._cb_player_list)
+        self.lib.client_set_challenge_callback(self.handle, self._cb_challenge)
         self.lib.client_set_error_callback(self.handle, self._cb_error)
     
     def _on_login_callback(self, json_msg):
@@ -179,6 +191,19 @@ class ChessClient:
                 self.callbacks['LOBBY_LIST'](msg)
         except Exception as e:
             print(f"Player list callback error: {e}")
+    
+    def _on_challenge_callback(self, json_msg):
+        """Handle challenge notification from C++"""
+        try:
+            msg = json.loads(json_msg.decode('utf-8'))
+            msg_type = msg.get('messageType', '')
+            print(f"DEBUG: Challenge callback received: {msg_type}")
+            if msg_type in self.callbacks:
+                self.callbacks[msg_type](msg)
+            elif 'CHALLENGE_NOTIFY' in self.callbacks:
+                self.callbacks['CHALLENGE_NOTIFY'](msg)
+        except Exception as e:
+            print(f"Challenge callback error: {e}")
     
     def _on_error_callback(self, error_msg):
         """Handle error from C++"""
@@ -262,18 +287,30 @@ class ChessClient:
             return False
         return self.lib.client_offer_draw(self.handle) == 1
     
-    # Deprecated/stub methods for compatibility
+    # Challenge methods
     def send_challenge(self, opponent):
-        """Deprecated - use random_match instead"""
-        pass
+        """Send challenge to specific player"""
+        if not self.handle:
+            return False
+        result = self.lib.client_send_challenge(
+            self.handle,
+            opponent.encode('utf-8')
+        )
+        return result == 1
     
-    def accept_challenge(self, challenger):
-        """Deprecated - matchmaking handles this"""
-        pass
+    def accept_challenge(self, challenger_id):
+        """Accept challenge from a player"""
+        if not self.handle:
+            return False
+        result = self.lib.client_accept_challenge(
+            self.handle,
+            str(challenger_id).encode('utf-8')
+        )
+        return result == 1
     
     def reject_challenge(self, challenger):
-        """Deprecated - matchmaking handles this"""
-        pass
+        """Reject challenge - not sending accept"""
+        pass  # Server handles rejection if no accept is sent
     
     def get_leaderboard(self):
         """Not implemented yet"""
