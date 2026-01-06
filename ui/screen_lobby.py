@@ -70,6 +70,35 @@ class LobbyScreen:
                 font=("Arial", 14, "bold"), 
                 fg='#2C3E50', bg='white').pack(pady=15, padx=20)
         
+        # ========== Game Mode Selection ==========
+        mode_frame = tk.Frame(left_panel, bg='white')
+        mode_frame.pack(pady=10, padx=20, fill='x')
+        
+        tk.Label(mode_frame, text="⏱️ Game Mode:", 
+                font=("Arial", 11, "bold"), 
+                fg='#2C3E50', bg='white').pack(anchor='w')
+        
+        self.game_mode = tk.StringVar(value="RAPID")
+        
+        modes_info = [
+            ("BLITZ", "⚡ Blitz (5 min)"),
+            ("RAPID", "🕐 Rapid (10 min)"),
+            ("CLASSICAL", "♔ Classical (30 min)")
+        ]
+        
+        for mode_value, mode_text in modes_info:
+            rb = tk.Radiobutton(mode_frame, text=mode_text, 
+                               variable=self.game_mode, value=mode_value,
+                               font=("Arial", 10), 
+                               fg='#34495E', bg='white',
+                               activebackground='white',
+                               selectcolor='#ECF0F1',
+                               cursor='hand2')
+            rb.pack(anchor='w', pady=2)
+        
+        ttk.Separator(left_panel, orient='horizontal').pack(fill='x', 
+                                                            pady=10, padx=20)
+        
         # Random match button
         self.random_btn = tk.Button(left_panel, text="🎲 Random Match", 
                                     command=self.do_random_match,
@@ -238,17 +267,29 @@ class LobbyScreen:
         
         selected_text = self.players_listbox.get(selection[0])
         opponent = selected_text.split()[0].strip()
+        mode = self.game_mode.get()
         
+        # TODO: Pass mode to challenge request
         self.client.send_challenge(opponent)
-        self.log(f"Challenge sent to {opponent}")
+        self.log(f"Challenge sent to {opponent} (Mode: {mode})")
+        
+        mode_names = {"BLITZ": "5 min", "RAPID": "10 min", "CLASSICAL": "30 min"}
         messagebox.showinfo("Challenge Sent", 
-                          f"Challenge sent to {opponent}.\nWaiting for response...")
+                          f"Challenge sent to {opponent}.\n"
+                          f"Mode: {mode} ({mode_names.get(mode, '')})\n"
+                          f"Waiting for response...")
     
     def do_random_match(self):
         """Find random opponent"""
+        mode = self.game_mode.get()
+        # TODO: Pass mode to matchmaking request
         self.client.random_match()
-        self.log("Searching for random opponent...")
-        messagebox.showinfo("Searching", "Finding a random opponent...")
+        self.log(f"Searching for random opponent (Mode: {mode})...")
+        
+        mode_names = {"BLITZ": "5 min", "RAPID": "10 min", "CLASSICAL": "30 min"}
+        messagebox.showinfo("Searching", 
+                          f"Finding a random opponent...\n"
+                          f"Mode: {mode} ({mode_names.get(mode, '')})")
     
     def do_logout(self):
         """Logout and return to login screen"""
@@ -335,3 +376,78 @@ class LobbyScreen:
     def hide(self):
         """Hide lobby screen"""
         self.frame.pack_forget()
+
+
+# ============== TEST MODE ==============
+if __name__ == "__main__":
+    class MockClient:
+        """Mock client for testing without server"""
+        def __init__(self):
+            self.connected = True
+            self.username = "TestPlayer"
+            self.callbacks = {}
+        
+        def set_callback(self, msg_type, callback):
+            self.callbacks[msg_type] = callback
+        
+        def get_player_list(self):
+            print("[MOCK] Requesting player list...")
+            # Simulate server response
+            if 'LOBBY_LIST' in self.callbacks:
+                mock_response = {
+                    'payload': {
+                        'players': [
+                            {'username': 'Alice', 'elo': 1350, 'status': 'online'},
+                            {'username': 'Bob', 'elo': 1200, 'status': 'online'},
+                            {'username': 'Charlie', 'elo': 1450, 'status': 'online'},
+                            {'username': 'Diana', 'elo': 1100, 'status': 'online'},
+                        ]
+                    }
+                }
+                self.callbacks['LOBBY_LIST'](mock_response)
+        
+        def send_challenge(self, opponent):
+            print(f"[MOCK] Challenge sent to: {opponent}")
+        
+        def random_match(self):
+            print("[MOCK] Finding random match...")
+        
+        def logout(self):
+            print("[MOCK] Logged out")
+    
+    # Create test window
+    root = tk.Tk()
+    root.title("Lobby Screen Test")
+    root.geometry("1200x700")
+    root.configure(bg='#ECF0F1')
+    
+    # Mock client
+    mock_client = MockClient()
+    
+    def on_game_start(game_id, opponent, your_color, opponent_elo):
+        print(f"[MOCK] Game started: ID={game_id}, vs {opponent}, color={your_color}")
+    
+    def on_view_leaderboard():
+        print("[MOCK] View leaderboard")
+        messagebox.showinfo("Leaderboard", "Leaderboard feature - Coming soon!")
+    
+    # Create lobby screen
+    lobby_screen = LobbyScreen(
+        root, 
+        mock_client, 
+        player_elo=1200,
+        on_game_start=on_game_start,
+        on_view_leaderboard=on_view_leaderboard
+    )
+    
+    lobby_screen.show()
+    
+    print("=" * 50)
+    print("Lobby Screen Test Mode")
+    print("=" * 50)
+    print("- Select game mode (BLITZ/RAPID/CLASSICAL)")
+    print("- Click 'Random Match' to test matchmaking")
+    print("- Select a player and click 'Challenge'")
+    print("=" * 50)
+    
+    root.mainloop()
