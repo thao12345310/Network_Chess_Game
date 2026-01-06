@@ -335,3 +335,65 @@ class GameScreen:
     def hide(self):
         """Hide game screen"""
         self.frame.pack_forget()
+
+
+# ============== TEST MODE ==============
+if __name__ == "__main__":
+    class MockClient:
+        """Mock client for testing without server"""
+        def __init__(self):
+            self.connected = True
+            self.username = "TestPlayer"
+            self.callbacks = {}
+        
+        def set_callback(self, msg_type, callback):
+            self.callbacks[msg_type] = callback
+        
+        def make_move(self, game_id, from_pos, to_pos):
+            print(f"[MOCK] Move: {from_pos} -> {to_pos} (game: {game_id})")
+            # Simulate server response
+            if 'MOVE_ACK' in self.callbacks:
+                self.callbacks['MOVE_ACK']({'success': True})
+        
+        def resign(self, game_id):
+            print(f"[MOCK] Resign from game {game_id}")
+        
+        def offer_draw(self, game_id):
+            print(f"[MOCK] Offer draw in game {game_id}")
+    
+    # Create test window
+    root = tk.Tk()
+    root.title("Game Screen Test")
+    root.geometry("1200x800")
+    root.configure(bg='#ECF0F1')
+    
+    # Mock client
+    mock_client = MockClient()
+    
+    def on_game_end(new_elo):
+        print(f"[MOCK] Game ended, new ELO: {new_elo}")
+        root.quit()
+    
+    # Create game screen
+    game_screen = GameScreen(root, mock_client, on_game_end)
+    
+    # Start a mock game
+    game_screen.start_game(
+        game_id=12345,
+        opponent="OpponentBot",
+        your_color="white",
+        opponent_elo=1350,
+        player_elo=1200
+    )
+    
+    game_screen.show()
+    
+    print("=" * 50)
+    print("Game Screen Test Mode")
+    print("=" * 50)
+    print("- Click on pieces to select")
+    print("- Click on destination to move")
+    print("- Test buttons: Resign, Draw, Chat")
+    print("=" * 50)
+    
+    root.mainloop()

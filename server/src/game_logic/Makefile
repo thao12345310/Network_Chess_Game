@@ -1,13 +1,7 @@
-# Detect OS
-ifeq ($(OS),Windows_NT)
-    TARGET = server.exe
-    LIBS = -lws2_32
-    RM = del
-else
-    TARGET = server
-    LIBS = -pthread
-    RM = rm -f
-endif
+# Linux only
+TARGET = server
+LIBS = -pthread
+RM = rm -f
 
 all: $(TARGET)
 
