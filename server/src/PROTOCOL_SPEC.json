@@ -1,0 +1,199 @@
+{
+    "protocol": {
+        "version": "2.0",
+        "description": "Network Chess Game Protocol - All messages use newline delimiter (\\n)",
+        "structure": {
+            "client_to_server": {
+                "messageType": "string - Message type identifier",
+                "payload": "object - Message-specific data"
+            },
+            "server_to_client": {
+                "messageType": "string - Message type identifier",
+                "responseCode": "number - HTTP-style status code (200, 400, etc.)",
+                "payload": "object - Response data"
+            }
+        }
+    },
+    "authentication": {
+        "AUTH_REGISTER_REQ": {
+            "direction": "Client -> Server",
+            "description": "Register a new user account",
+            "example": {
+                "messageType": "AUTH_REGISTER_REQ",
+                "payload": {
+                    "username": "player1",
+                    "password": "password123",
+                    "email": "player1@example.com"
+                }
+            }
+        },
+        "AUTH_REGISTER_ACK": {
+            "direction": "Server -> Client",
+            "description": "Registration response",
+            "example": {
+                "messageType": "AUTH_REGISTER_ACK",
+                "responseCode": 201,
+                "payload": {}
+            }
+        },
+        "AUTH_LOGIN_REQ": {
+            "direction": "Client -> Server",
+            "description": "Login to server",
+            "example": {
+                "messageType": "AUTH_LOGIN_REQ",
+                "payload": {
+                    "username": "player1",
+                    "password": "password123"
+                }
+            }
+        },
+        "AUTH_LOGIN_ACK": {
+            "direction": "Server -> Client",
+            "description": "Login response",
+            "example": {
+                "messageType": "AUTH_LOGIN_ACK",
+                "responseCode": 200,
+                "payload": {
+                    "user_id": 123,
+                    "elo": 1200
+                }
+            }
+        }
+    },
+    "lobby": {
+        "LOBBY_LIST": {
+            "direction": "Client <-> Server",
+            "description": "Request or receive list of online players",
+            "request_example": {
+                "messageType": "LOBBY_LIST",
+                "payload": {}
+            },
+            "response_example": {
+                "messageType": "LOBBY_LIST",
+                "responseCode": 200,
+                "payload": {
+                    "players": [
+                        "player1",
+                        "player2",
+                        "player3"
+                    ]
+                }
+            }
+        }
+    },
+    "matchmaking": {
+        "MATCH_FIND_REQ": {
+            "direction": "Client -> Server",
+            "description": "Request to find a match",
+            "example": {
+                "messageType": "MATCH_FIND_REQ",
+                "payload": {
+                    "mode": "random"
+                }
+            }
+        },
+        "MATCH_START": {
+            "direction": "Server -> Client",
+            "description": "Notify clients that match has started",
+            "example": {
+                "messageType": "MATCH_START",
+                "responseCode": 200,
+                "payload": {
+                    "game_id": 12345,
+                    "opponent": "player2",
+                    "opponent_elo": 1250,
+                    "your_color": "white",
+                    "time_control": "10+0"
+                }
+            }
+        }
+    },
+    "gameplay": {
+        "MOVE_REQ": {
+            "direction": "Client -> Server",
+            "description": "Make a chess move",
+            "example": {
+                "messageType": "MOVE_REQ",
+                "payload": {
+                    "from": "e2",
+                    "to": "e4",
+                    "promotion": null
+                }
+            }
+        },
+        "MOVE_ACK": {
+            "direction": "Server -> Client",
+            "description": "Acknowledge move was received and valid",
+            "example": {
+                "messageType": "MOVE_ACK",
+                "responseCode": 200,
+                "payload": {
+                    "status": "accepted"
+                }
+            }
+        },
+        "MOVE_UPDATE": {
+            "direction": "Server -> Client",
+            "description": "Notify opponent of move made",
+            "example": {
+                "messageType": "MOVE_UPDATE",
+                "responseCode": 200,
+                "payload": {
+                    "from": "e2",
+                    "to": "e4",
+                    "promotion": null,
+                    "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+                }
+            }
+        }
+    },
+    "interaction": {
+        "EMOJI_SEND": {
+            "direction": "Client -> Server",
+            "description": "Send emoji or reaction during game",
+            "example": {
+                "messageType": "EMOJI_SEND",
+                "payload": {
+                    "value": "👍",
+                    "type": "reaction"
+                }
+            }
+        },
+        "EMOJI_UPDATE": {
+            "direction": "Server -> Client",
+            "description": "Forward emoji to opponent",
+            "example": {
+                "messageType": "EMOJI_UPDATE",
+                "responseCode": 200,
+                "payload": {
+                    "value": "👍",
+                    "type": "reaction",
+                    "from": "player1"
+                }
+            }
+        }
+    },
+    "errors": {
+        "ERROR": {
+            "direction": "Server -> Client",
+            "description": "Error response for any invalid request",
+            "example": {
+                "messageType": "ERROR",
+                "responseCode": 400,
+                "payload": {
+                    "reason": "Missing or invalid messageType"
+                }
+            },
+            "response_codes": {
+                "200": "Success",
+                "201": "Created",
+                "400": "Bad Request - Invalid format or missing fields",
+                "401": "Unauthorized - Login required",
+                "403": "Forbidden - Not allowed (e.g., not in match)",
+                "404": "Not Found - Resource doesn't exist",
+                "409": "Conflict - State conflict (e.g., no opponent)",
+                "500": "Server Error - Internal server error"
+            }
+        }
+    }
+}

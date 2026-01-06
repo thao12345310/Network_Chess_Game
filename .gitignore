@@ -28,9 +28,9 @@ x86/
 *.la
 *.lo
 
-# Executables
-server
-client
+# Executables (in root directory only)
+/server/server
+/client/chess_client
 *.elf
 
 # Python
