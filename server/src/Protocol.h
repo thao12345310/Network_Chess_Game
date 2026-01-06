@@ -43,6 +43,11 @@ namespace Protocol {
         
         // Errors
         constexpr const char* ERROR = "ERROR";
+
+        // Challenge
+        constexpr const char* CHALLENGE_REQ = "CHALLENGE_REQ";
+        constexpr const char* CHALLENGE_RESP = "CHALLENGE_RESP"; // For accept/decline
+        constexpr const char* CHALLENGE_NOTIFY = "CHALLENGE_NOTIFY"; // To target
     }
 
 }

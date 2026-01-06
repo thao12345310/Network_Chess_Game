@@ -14,6 +14,7 @@ def init_db():
             player_id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
             password TEXT NOT NULL,
+            email TEXT,
             elo INTEGER DEFAULT 1000
         )
     """)

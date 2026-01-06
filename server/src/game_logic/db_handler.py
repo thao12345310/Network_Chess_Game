@@ -14,7 +14,7 @@ def register_user(username, password, email):
             return None # Username taken
             
         cur.execute(
-            "INSERT INTO Player (username, password_hash, email, elo) VALUES (?, ?, ?, 1200)",
+            "INSERT INTO Player (username, password, email, elo) VALUES (?, ?, ?, 1200)",
             (username, password, email)
         )
         pid = cur.lastrowid
@@ -30,7 +30,7 @@ def verify_user(username, password):
     conn = get_connection()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT player_id, password_hash FROM Player WHERE username = ?", (username,))
+        cur.execute("SELECT player_id, password FROM Player WHERE username = ?", (username,))
         row = cur.fetchone()
         if row:
             pid, stored_pass = row

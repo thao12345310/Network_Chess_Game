@@ -99,9 +99,8 @@ bool GameClient::joinLobby()
 
 bool GameClient::sendChallenge(const std::string &opponentUsername)
 {
-    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["messageType"] = "CHALLENGE_SEND";
+    msg["messageType"] = "CHALLENGE_REQ";
     msg["payload"]["opponent_username"] = opponentUsername;
 
     return netClient->sendMessage(msg);
@@ -109,20 +108,20 @@ bool GameClient::sendChallenge(const std::string &opponentUsername)
 
 bool GameClient::acceptChallenge(const std::string &challengeId)
 {
-    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["messageType"] = "CHALLENGE_ACCEPT";
+    msg["messageType"] = "CHALLENGE_RESP";
     msg["payload"]["challenge_id"] = challengeId;
+    msg["payload"]["accepted"] = true;
 
     return netClient->sendMessage(msg);
 }
 
 bool GameClient::declineChallenge(const std::string &challengeId)
 {
-    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["messageType"] = "CHALLENGE_DECLINE";
+    msg["messageType"] = "CHALLENGE_RESP";
     msg["payload"]["challenge_id"] = challengeId;
+    msg["payload"]["accepted"] = false;
 
     return netClient->sendMessage(msg);
 }
@@ -265,6 +264,21 @@ void GameClient::processMessage(const Json::Value &msg)
         if (onPlayerListUpdate)
         {
             onPlayerListUpdate(msg);
+        }
+    }
+    else if (type == "CHALLENGE_NOTIFY")
+    {
+        if (onChallengeReceived)
+        {
+            onChallengeReceived(msg);
+        }
+    }
+    else if (type == "CHALLENGE_RESP")
+    {
+        // Maybe trigger game update or just log?
+        // Usually UI updates status
+        if (onGameUpdate) {
+             onGameUpdate(msg);
         }
     }
     else if (type == "ERROR")
