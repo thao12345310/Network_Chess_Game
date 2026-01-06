@@ -1,6 +1,20 @@
 # Python dependencies for Chess Client GUI
 
-# Tkinter is built-in with Python, no need to install
+# Core GUI library - Tkinter (built-in with Python on most systems)
+# On Ubuntu/Debian: sudo apt install python3-tk
+# On Windows/Mac: Usually pre-installed with Python
 
-# Optional: For better JSON handling (already in stdlib)
-# No external dependencies required!
+# Standard library dependencies (built-in, no installation needed):
+# - ctypes: For C library integration (libchessclient.so)
+# - json: For JSON message parsing
+# - threading: For async network operations
+# - pathlib: For file path handling
+# - datetime: For timestamp formatting
+# - time: For delays and timing
+
+# Optional: For development and testing
+# pylint>=2.15.0  # Code quality checking
+# black>=22.0.0   # Code formatting
+
+# Note: All required libraries are part of Python standard library!
+# No pip installation needed for core functionality.

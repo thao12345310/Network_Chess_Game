@@ -199,9 +199,9 @@ class GameScreen:
     
     def setup_callbacks(self):
         """Setup network callbacks"""
-        self.client.set_callback('MOVE_RESPONSE', self.on_move_response)
-        self.client.set_callback('GAME_UPDATE', self.on_game_update)
-        self.client.set_callback('GAME_END', self.on_game_end_msg)
+        self.client.set_callback('MOVE_ACK', self.on_move_response)
+        self.client.set_callback('MOVE_UPDATE', self.on_game_update)
+        self.client.set_callback('EMOJI_UPDATE', self.on_emoji_update)
     
     def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo):
         """Initialize game with data"""
@@ -300,6 +300,14 @@ class GameScreen:
             # Opponent's move
             self.add_move(move.get('from', '?'), move.get('to', '?'))
             # TODO: Update board from server state
+    
+    def on_emoji_update(self, msg):
+        """Handle emoji/chat update from opponent"""
+        emoji = msg.get('emoji', '')
+        sender = msg.get('from', 'Opponent')
+        if emoji:
+            # Display emoji in chat or as notification
+            messagebox.showinfo("Emoji", f"{sender}: {emoji}")
     
     def on_game_end_msg(self, msg):
         """Handle game end"""

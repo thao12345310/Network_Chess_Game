@@ -195,11 +195,8 @@ class LobbyScreen:
     
     def setup_callbacks(self):
         """Setup network callbacks"""
-        self.client.set_callback('PLAYER_LIST', self.on_player_list)
-        self.client.set_callback('CHALLENGE', self.on_challenge)
-        self.client.set_callback('CHALLENGE_ACCEPTED', self.on_challenge_accepted)
-        self.client.set_callback('CHALLENGE_REJECTED', self.on_challenge_rejected)
-        self.client.set_callback('GAME_START', self.on_game_start_msg)
+        self.client.set_callback('LOBBY_LIST', self.on_player_list)
+        self.client.set_callback('MATCH_START', self.on_game_start_msg)
     
     def refresh_players(self):
         """Refresh player list"""
@@ -261,50 +258,31 @@ class LobbyScreen:
     
     def on_player_list(self, msg):
         """Handle player list update"""
-        players = msg.get('players', [])
-        self.players_data = players
+        payload = msg.get('payload', {})
+        players = payload.get('players', [])
+        
+        # Convert to list of dicts if it's just names
+        if players and isinstance(players[0], str):
+            self.players_data = [{'username': name, 'elo': 1200, 'status': 'online'} 
+                                for name in players]
+        else:
+            self.players_data = players
         
         self.players_listbox.delete(0, 'end')
-        for player in players:
+        for player in self.players_data:
             self.display_player(player)
         
-        self.player_count_label.config(text=f"{len(players)} players")
-        self.log(f"Players online: {len(players)}")
+        self.player_count_label.config(text=f"{len(self.players_data)} players")
+        self.log(f"Players online: {len(self.players_data)}")
     
-    def on_challenge(self, msg):
-        """Handle incoming challenge"""
-        challenger = msg.get('challenger')
-        challenger_elo = msg.get('challenger_elo', 1200)
-        
-        result = messagebox.askyesno("Challenge Received", 
-                                     f"⚔️ {challenger} (ELO: {challenger_elo})\n\n"
-                                     f"challenged you to a game!\n\nAccept?",
-                                     icon='question')
-        if result:
-            self.client.accept_challenge(challenger)
-            self.log(f"✅ Accepted challenge from {challenger}")
-        else:
-            self.client.reject_challenge(challenger)
-            self.log(f"❌ Rejected challenge from {challenger}")
-    
-    def on_challenge_accepted(self, msg):
-        """Handle challenge accepted"""
-        opponent = msg.get('opponent')
-        self.log(f"✅ {opponent} accepted your challenge!")
-        messagebox.showinfo("Accepted", f"{opponent} accepted!")
-    
-    def on_challenge_rejected(self, msg):
-        """Handle challenge rejected"""
-        opponent = msg.get('opponent')
-        self.log(f"❌ {opponent} rejected your challenge")
-        messagebox.showinfo("Rejected", f"{opponent} declined")
-    
+
     def on_game_start_msg(self, msg):
         """Handle game start message"""
-        game_id = msg.get('game_id')
-        opponent = msg.get('opponent')
-        your_color = msg.get('your_color', 'white')
-        opponent_elo = msg.get('opponent_elo', 1200)
+        payload = msg.get('payload', {})
+        game_id = payload.get('game_id')
+        opponent = payload.get('opponent')
+        your_color = payload.get('your_color', 'white')
+        opponent_elo = payload.get('opponent_elo', 1200)
         
         self.log(f"Game starting vs {opponent}!")
         self.hide()

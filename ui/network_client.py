@@ -1,212 +1,273 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-TCP Network Client for Chess Game
+Python binding for C++ Chess Client using ctypes
+Linux only version
 """
 
-import socket
+import ctypes
 import json
-from datetime import datetime
+import threading
+from pathlib import Path
+
+
+# Linux shared library name
+LIB_NAME = 'libchessclient.so'
 
 
 class ChessClient:
-    """TCP Socket Client for Chess Game"""
+    """Python wrapper for C++ GameClient using ctypes"""
     
     def __init__(self, host='127.0.0.1', port=5001):
         self.host = host
         self.port = port
-        self.socket = None
+        self.handle = None
         self.connected = False
-        self.session_token = None
         self.username = None
-        self.game_id = None
         self.callbacks = {}
+        
+        # Load shared library
+        lib_path = Path(__file__).parent / LIB_NAME
+        if not lib_path.exists():
+            raise FileNotFoundError(f"C++ client library not found: {lib_path}\nPlease build C++ client first: cd client && make && make install")
+        
+        self.lib = ctypes.CDLL(str(lib_path))
+        self._setup_function_signatures()
+        
+    def _setup_function_signatures(self):
+        """Define C function signatures"""
+        lib = self.lib
+        
+        # Callback types
+        self.MessageCallbackType = ctypes.CFUNCTYPE(None, ctypes.c_char_p)
+        self.ErrorCallbackType = ctypes.CFUNCTYPE(None, ctypes.c_char_p)
+        
+        # Client lifecycle
+        lib.client_create.argtypes = [ctypes.c_char_p, ctypes.c_int]
+        lib.client_create.restype = ctypes.c_void_p
+        
+        lib.client_destroy.argtypes = [ctypes.c_void_p]
+        lib.client_destroy.restype = None
+        
+        lib.client_connect.argtypes = [ctypes.c_void_p]
+        lib.client_connect.restype = ctypes.c_int
+        
+        lib.client_disconnect.argtypes = [ctypes.c_void_p]
+        lib.client_disconnect.restype = None
+        
+        # Callbacks
+        lib.client_set_login_callback.argtypes = [ctypes.c_void_p, self.MessageCallbackType]
+        lib.client_set_login_callback.restype = None
+        
+        lib.client_set_game_update_callback.argtypes = [ctypes.c_void_p, self.MessageCallbackType]
+        lib.client_set_game_update_callback.restype = None
+        
+        lib.client_set_player_list_callback.argtypes = [ctypes.c_void_p, self.MessageCallbackType]
+        lib.client_set_player_list_callback.restype = None
+        
+        lib.client_set_error_callback.argtypes = [ctypes.c_void_p, self.ErrorCallbackType]
+        lib.client_set_error_callback.restype = None
+        
+        # Actions
+        lib.client_login.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+        lib.client_login.restype = ctypes.c_int
+        
+        lib.client_register.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+        lib.client_register.restype = ctypes.c_int
+        
+        lib.client_request_player_list.argtypes = [ctypes.c_void_p]
+        lib.client_request_player_list.restype = ctypes.c_int
+        
+        lib.client_send_move.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+        lib.client_send_move.restype = ctypes.c_int
+        
+        lib.client_get_username.argtypes = [ctypes.c_void_p]
+        lib.client_get_username.restype = ctypes.c_char_p
+        
+        lib.client_resign.argtypes = [ctypes.c_void_p]
+        lib.client_resign.restype = ctypes.c_int
+        
+        lib.client_offer_draw.argtypes = [ctypes.c_void_p]
+        lib.client_offer_draw.restype = ctypes.c_int
         
     def connect(self):
         """Connect to server"""
         try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect((self.host, self.port))
-            self.connected = True
-            return True
+            # Create client handle
+            self.handle = self.lib.client_create(
+                self.host.encode('utf-8'),
+                self.port
+            )
+            
+            if not self.handle:
+                return False
+            
+            # Setup callbacks
+            self._setup_callbacks()
+            
+            # Connect
+            result = self.lib.client_connect(self.handle)
+            self.connected = (result == 1)
+            return self.connected
         except Exception as e:
             print(f"Connection error: {e}")
             return False
     
     def disconnect(self):
         """Disconnect from server"""
-        if self.socket:
-            try:
-                self.socket.close()
-            except:
-                pass
+        if self.handle:
+            self.lib.client_disconnect(self.handle)
+            self.lib.client_destroy(self.handle)
+            self.handle = None
         self.connected = False
-        self.socket = None
     
-    def send_message(self, msg_dict):
-        """Send JSON message to server"""
-        if not self.connected:
-            return False
+    def _setup_callbacks(self):
+        """Setup C++ callbacks"""
+        # Keep references to prevent garbage collection
+        self._cb_login = self.MessageCallbackType(self._on_login_callback)
+        self._cb_game_update = self.MessageCallbackType(self._on_game_update_callback)
+        self._cb_player_list = self.MessageCallbackType(self._on_player_list_callback)
+        self._cb_error = self.ErrorCallbackType(self._on_error_callback)
         
+        self.lib.client_set_login_callback(self.handle, self._cb_login)
+        self.lib.client_set_game_update_callback(self.handle, self._cb_game_update)
+        self.lib.client_set_player_list_callback(self.handle, self._cb_player_list)
+        self.lib.client_set_error_callback(self.handle, self._cb_error)
+    
+    def _on_login_callback(self, json_msg):
+        """Handle login response from C++"""
         try:
-            msg_json = json.dumps(msg_dict)
-            msg_bytes = msg_json.encode('utf-8')
-            # Send message length first (4 bytes)
-            msg_len = len(msg_bytes)
-            self.socket.sendall(msg_len.to_bytes(4, byteorder='big'))
-            # Send actual message
-            self.socket.sendall(msg_bytes)
-            return True
+            msg = json.loads(json_msg.decode('utf-8'))
+            msg_type = msg.get('messageType', '')
+            
+            # Handle both login and register responses
+            if msg_type in self.callbacks:
+                self.callbacks[msg_type](msg)
+            elif 'AUTH_LOGIN_ACK' in self.callbacks and 'AUTH' in msg_type:
+                self.callbacks['AUTH_LOGIN_ACK'](msg)
+            elif 'AUTH_REGISTER_ACK' in self.callbacks and 'AUTH' in msg_type:
+                self.callbacks['AUTH_REGISTER_ACK'](msg)
         except Exception as e:
-            print(f"Send error: {e}")
-            return False
+            print(f"Login callback error: {e}")
     
-    def receive_message(self):
-        """Receive JSON message from server"""
+    def _on_game_update_callback(self, json_msg):
+        """Handle game update from C++"""
         try:
-            # Read message length (4 bytes)
-            len_bytes = self.socket.recv(4)
-            if not len_bytes:
-                return None
-            msg_len = int.from_bytes(len_bytes, byteorder='big')
-            
-            # Read actual message
-            msg_bytes = b''
-            while len(msg_bytes) < msg_len:
-                chunk = self.socket.recv(msg_len - len(msg_bytes))
-                if not chunk:
-                    return None
-                msg_bytes += chunk
-            
-            msg_json = msg_bytes.decode('utf-8')
-            return json.loads(msg_json)
+            msg = json.loads(json_msg.decode('utf-8'))
+            msg_type = msg.get('messageType', '')
+            if msg_type in self.callbacks:
+                self.callbacks[msg_type](msg)
         except Exception as e:
-            print(f"Receive error: {e}")
-            return None
+            print(f"Game update callback error: {e}")
     
-    def listen_loop(self):
-        """Listen for incoming messages"""
-        while self.connected:
-            msg = self.receive_message()
-            if msg:
-                self.handle_message(msg)
-            else:
-                self.connected = False
-                break
+    def _on_player_list_callback(self, json_msg):
+        """Handle player list from C++"""
+        try:
+            msg = json.loads(json_msg.decode('utf-8'))
+            if 'LOBBY_LIST' in self.callbacks:
+                self.callbacks['LOBBY_LIST'](msg)
+        except Exception as e:
+            print(f"Player list callback error: {e}")
     
-    def handle_message(self, msg):
-        """Handle received message"""
-        msg_type = msg.get('type', '')
-        if msg_type in self.callbacks:
-            self.callbacks[msg_type](msg)
+    def _on_error_callback(self, error_msg):
+        """Handle error from C++"""
+        try:
+            error_str = error_msg.decode('utf-8')
+            if 'ERROR' in self.callbacks:
+                self.callbacks['ERROR']({'error': error_str})
+            print(f"C++ Client Error: {error_str}")
+        except Exception as e:
+            print(f"Error callback error: {e}")
     
     def set_callback(self, msg_type, callback):
-        """Set callback for message type"""
+        """Register callback for message type"""
         self.callbacks[msg_type] = callback
     
-    # Game actions
     def login(self, username, password):
         """Login to server"""
-        return self.send_message({
-            'type': 'LOGIN',
-            'username': username,
-            'password': password,
-            'timestamp': int(datetime.now().timestamp())
-        })
+        if not self.handle:
+            return False
+        self.username = username
+        result = self.lib.client_login(
+            self.handle,
+            username.encode('utf-8'),
+            password.encode('utf-8')
+        )
+        return result == 1
     
-    def register(self, username, password, email):
+    def register(self, username, password, email=''):
         """Register new account"""
-        return self.send_message({
-            'type': 'REGISTER',
-            'username': username,
-            'password': password,
-            'email': email,
-            'timestamp': int(datetime.now().timestamp())
-        })
-    
-    def logout(self):
-        """Logout from server"""
-        return self.send_message({
-            'type': 'LOGOUT',
-            'session_token': self.session_token
-        })
+        if not self.handle:
+            return False
+        result = self.lib.client_register(
+            self.handle,
+            username.encode('utf-8'),
+            password.encode('utf-8'),
+            email.encode('utf-8')
+        )
+        return result == 1
     
     def get_player_list(self):
-        """Get list of online players"""
-        return self.send_message({
-            'type': 'GET_PLAYERS',
-            'session_token': self.session_token
-        })
-    
-    def send_challenge(self, opponent):
-        """Send challenge to opponent"""
-        return self.send_message({
-            'type': 'CHALLENGE',
-            'session_token': self.session_token,
-            'opponent': opponent
-        })
-    
-    def accept_challenge(self, challenger):
-        """Accept challenge"""
-        return self.send_message({
-            'type': 'ACCEPT_CHALLENGE',
-            'session_token': self.session_token,
-            'challenger': challenger
-        })
-    
-    def reject_challenge(self, challenger):
-        """Reject challenge"""
-        return self.send_message({
-            'type': 'REJECT_CHALLENGE',
-            'session_token': self.session_token,
-            'challenger': challenger
-        })
-    
-    def random_match(self):
-        """Find random opponent"""
-        return self.send_message({
-            'type': 'RANDOM_MATCH',
-            'session_token': self.session_token
-        })
-    
-    def get_leaderboard(self):
-        """Get ELO leaderboard"""
-        return self.send_message({
-            'type': 'GET_LEADERBOARD',
-            'session_token': self.session_token
-        })
-    
-    def get_player_stats(self, username=None):
-        """Get player statistics"""
-        return self.send_message({
-            'type': 'GET_STATS',
-            'session_token': self.session_token,
-            'username': username
-        })
+        """Request player list"""
+        if not self.handle:
+            return False
+        result = self.lib.client_request_player_list(self.handle)
+        return result == 1
     
     def make_move(self, game_id, from_pos, to_pos):
-        """Make a move"""
-        return self.send_message({
-            'type': 'MOVE',
-            'game_id': game_id,
-            'session_token': self.session_token,
-            'from': from_pos,
-            'to': to_pos,
-            'timestamp': int(datetime.now().timestamp())
-        })
+        """Make a chess move"""
+        if not self.handle:
+            return False
+        result = self.lib.client_send_move(
+            self.handle,
+            from_pos.encode('utf-8'),
+            to_pos.encode('utf-8')
+        )
+        return result == 1
+    
+    def random_match(self):
+        """Find random match"""
+        # TODO: Implement in C++ client
+        if not self.handle:
+            return False
+        # For now, call join_lobby
+        result = self.lib.client_join_lobby(self.handle)
+        return result == 1
+    
+    def logout(self):
+        """Logout"""
+        self.disconnect()
+        return True
     
     def resign(self, game_id):
         """Resign from game"""
-        return self.send_message({
-            'type': 'RESIGN',
-            'game_id': game_id,
-            'session_token': self.session_token
-        })
+        if not self.handle:
+            return False
+        return self.lib.client_resign(self.handle) == 1
     
     def offer_draw(self, game_id):
         """Offer draw"""
-        return self.send_message({
-            'type': 'OFFER_DRAW',
-            'game_id': game_id,
-            'session_token': self.session_token
-        })
+        if not self.handle:
+            return False
+        return self.lib.client_offer_draw(self.handle) == 1
+    
+    # Deprecated/stub methods for compatibility
+    def send_challenge(self, opponent):
+        """Deprecated - use random_match instead"""
+        pass
+    
+    def accept_challenge(self, challenger):
+        """Deprecated - matchmaking handles this"""
+        pass
+    
+    def reject_challenge(self, challenger):
+        """Deprecated - matchmaking handles this"""
+        pass
+    
+    def get_leaderboard(self):
+        """Not implemented yet"""
+        pass
+    
+    def get_player_stats(self, username=None):
+        """Not implemented yet"""
+        pass

@@ -200,8 +200,8 @@ class LoginScreen:
             self.status_label.config(text="Connected")
             self.connect_btn.config(state='disabled', bg='#95A5A6')
             
-            # Start listening thread
-            threading.Thread(target=self.client.listen_loop, daemon=True).start()
+            # C++ client handles message listening internally via callbacks
+            # No need for separate Python listen thread
             
             messagebox.showinfo("Connected", "Connected to server successfully!")
         else:
@@ -222,7 +222,7 @@ class LoginScreen:
         
         if self.is_login_mode:
             # Login
-            self.client.set_callback('LOGIN_RESPONSE', self.on_login_response)
+            self.client.set_callback('AUTH_LOGIN_ACK', self.on_login_response)
             self.client.login(username, password)
         else:
             # Register
@@ -231,30 +231,39 @@ class LoginScreen:
                 messagebox.showwarning("Warning", "Please enter email")
                 return
             
-            self.client.set_callback('REGISTER_RESPONSE', self.on_register_response)
+            self.client.set_callback('AUTH_REGISTER_ACK', self.on_register_response)
             self.client.register(username, password, email)
     
     def on_login_response(self, msg):
         """Handle login response"""
-        if msg.get('success'):
-            self.client.session_token = msg.get('session_token')
-            self.client.username = msg.get('username')
-            elo = msg.get('elo', 1200)
+        response_code = msg.get('responseCode', 0)
+        payload = msg.get('payload', {})
+        
+        if response_code == 200:
+            # Success
+            self.client.username = self.username_entry.get()
+            elo = payload.get('elo', 1200)
             
             messagebox.showinfo("Success", f"Welcome {self.client.username}!\nELO: {elo}")
             self.on_login_success(elo)
         else:
-            error = msg.get('message', 'Login failed')
-            messagebox.showerror("Login Failed", error)
+            # Error
+            reason = payload.get('reason', 'Login failed')
+            messagebox.showerror("Login Failed", f"Error {response_code}: {reason}")
     
     def on_register_response(self, msg):
         """Handle register response"""
-        if msg.get('success'):
+        response_code = msg.get('responseCode', 0)
+        payload = msg.get('payload', {})
+        
+        if response_code == 201:
+            # Success (Created)
             messagebox.showinfo("Success", "Registration successful! Please login.")
             self.toggle_mode()
         else:
-            error = msg.get('message', 'Registration failed')
-            messagebox.showerror("Registration Failed", error)
+            # Error
+            reason = payload.get('reason', 'Registration failed')
+            messagebox.showerror("Registration Failed", f"Error {response_code}: {reason}")
     
     def show(self):
         """Show login screen"""

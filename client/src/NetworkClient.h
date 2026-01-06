@@ -3,7 +3,7 @@
 
 #include <string>
 #include <functional>
-#include <jsoncpp/json/json.h>
+#include <json/json.h>
 
 // Socket headers - Windows/Linux compatibility
 #ifdef _WIN32
