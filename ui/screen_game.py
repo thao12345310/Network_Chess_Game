@@ -239,25 +239,54 @@ class GameScreen:
             return
         
         row, col = square
+        piece = self.chess_board.get_piece(row, col)
         
         if self.chess_board.selected_square is None:
-            # Select piece
-            piece = self.chess_board.get_piece(row, col)
+            # Select piece - but only if it's the player's piece
             if piece and piece != ' ':
-                self.chess_board.selected_square = (row, col)
+                # Check if this is the player's piece
+                is_white_piece = piece.isupper()
+                is_player_white = self.player_color == 'white'
+                
+                if (is_white_piece and is_player_white) or (not is_white_piece and not is_player_white):
+                    self.chess_board.selected_square = (row, col)
+                    # Get and highlight valid moves
+                    valid_moves = self.chess_board.get_valid_moves(row, col)
+                    self.chess_board.highlighted_squares = valid_moves
         else:
-            # Make move
-            from_row, from_col = self.chess_board.selected_square
-            from_pos = self.chess_board.pos_to_notation(from_row, from_col)
-            to_pos = self.chess_board.pos_to_notation(row, col)
-            
-            # Update local board
-            self.chess_board.make_move(from_row, from_col, row, col)
-            
-            # Send to server
-            if self.client.connected and self.game_id:
-                self.client.make_move(self.game_id, from_pos, to_pos)
-                self.add_move(from_pos, to_pos)
+            # Check if clicking the same square to deselect
+            if self.chess_board.selected_square == (row, col):
+                self.chess_board.clear_selection()
+            # Check if this is a valid move
+            elif (row, col) in self.chess_board.highlighted_squares:
+                # Make move
+                from_row, from_col = self.chess_board.selected_square
+                from_pos = self.chess_board.pos_to_notation(from_row, from_col)
+                to_pos = self.chess_board.pos_to_notation(row, col)
+                
+                # Update local board
+                self.chess_board.make_move(from_row, from_col, row, col)
+                
+                # Send to server
+                if self.client.connected and self.game_id:
+                    self.client.make_move(self.game_id, from_pos, to_pos)
+                    self.add_move(from_pos, to_pos)
+            else:
+                # Clicking on another piece of the same color - select it instead
+                if piece and piece != ' ':
+                    is_white_piece = piece.isupper()
+                    is_player_white = self.player_color == 'white'
+                    
+                    if (is_white_piece and is_player_white) or (not is_white_piece and not is_player_white):
+                        self.chess_board.selected_square = (row, col)
+                        valid_moves = self.chess_board.get_valid_moves(row, col)
+                        self.chess_board.highlighted_squares = valid_moves
+                    else:
+                        # Clicked on opponent's piece that's not a valid capture
+                        self.chess_board.clear_selection()
+                else:
+                    # Clicked empty square that's not a valid move
+                    self.chess_board.clear_selection()
         
         self.chess_board.draw()
     

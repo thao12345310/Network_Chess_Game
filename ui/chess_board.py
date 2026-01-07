@@ -6,6 +6,13 @@ Chess Board Logic and Rendering
 
 import tkinter as tk
 
+try:
+    import chess
+    HAS_CHESS = True
+except ImportError:
+    HAS_CHESS = False
+    print("WARNING: python-chess not installed. Valid move highlighting disabled.")
+
 
 class ChessBoard:
     """Chess Board with Tkinter Canvas"""
@@ -20,7 +27,9 @@ class ChessBoard:
         self.canvas = canvas
         self.square_size = square_size
         self.selected_square = None
+        self.highlighted_squares = []  # List of (row, col) for valid moves
         self.board = self.init_board()
+        self.current_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
     
     def init_board(self):
         """Initialize chess board"""
@@ -40,6 +49,8 @@ class ChessBoard:
         """Reset board to initial position"""
         self.board = self.init_board()
         self.selected_square = None
+        self.highlighted_squares = []
+        self.current_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
     
     def draw(self):
         """Draw chess board on canvas"""
@@ -53,14 +64,41 @@ class ChessBoard:
                 x2 = x1 + self.square_size
                 y2 = y1 + self.square_size
                 
-                # Color
+                # Base color
                 color = "#F0D9B5" if (row + col) % 2 == 0 else "#B58863"
                 
-                # Highlight selected
+                # Highlight selected square
                 if self.selected_square and self.selected_square == (row, col):
                     color = "#BACA44"
                 
+                # Highlight valid move squares
+                is_valid_move = (row, col) in self.highlighted_squares
+                if is_valid_move:
+                    # Use a different highlight color for valid moves
+                    color = "#AED581" if (row + col) % 2 == 0 else "#8BC34A"
+                
                 self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="gray")
+                
+                # Draw valid move indicator (circle)
+                if is_valid_move:
+                    piece = self.board[row][col]
+                    cx = x1 + self.square_size / 2
+                    cy = y1 + self.square_size / 2
+                    
+                    if piece == ' ':
+                        # Empty square - draw small dot
+                        r = 10
+                        self.canvas.create_oval(
+                            cx - r, cy - r, cx + r, cy + r,
+                            fill="#555555", outline=""
+                        )
+                    else:
+                        # Capturable piece - draw ring around square
+                        r = self.square_size / 2 - 5
+                        self.canvas.create_oval(
+                            cx - r, cy - r, cx + r, cy + r,
+                            fill="", outline="#E53935", width=4
+                        )
                 
                 # Draw piece
                 piece = self.board[row][col]
@@ -111,9 +149,84 @@ class ChessBoard:
         self.board[to_row][to_col] = self.board[from_row][from_col]
         self.board[from_row][from_col] = ' '
         self.selected_square = None
+        self.highlighted_squares = []  # Clear highlights after move
+        
+        # Update FEN after move
+        if HAS_CHESS:
+            try:
+                from_notation = self.pos_to_notation(from_row, from_col)
+                to_notation = self.pos_to_notation(to_row, to_col)
+                board = chess.Board(self.current_fen)
+                move = chess.Move.from_uci(from_notation + to_notation)
+                if move in board.legal_moves:
+                    board.push(move)
+                    self.current_fen = board.fen()
+            except:
+                pass
     
     def get_piece(self, row, col):
         """Get piece at position"""
         if 0 <= row < 8 and 0 <= col < 8:
             return self.board[row][col]
         return None
+    
+    def get_valid_moves(self, row, col):
+        """
+        Get list of valid move squares for the piece at (row, col).
+        Returns list of (row, col) tuples representing valid destinations.
+        """
+        if not HAS_CHESS:
+            return []
+        
+        try:
+            board = chess.Board(self.current_fen)
+            from_square = self.pos_to_notation(row, col)
+            from_sq = chess.parse_square(from_square)
+            
+            valid_moves = []
+            for move in board.legal_moves:
+                if move.from_square == from_sq:
+                    to_notation = chess.square_name(move.to_square)
+                    to_pos = self.notation_to_pos(to_notation)
+                    if to_pos:
+                        valid_moves.append(to_pos)
+            
+            return valid_moves
+        except Exception as e:
+            print(f"Error getting valid moves: {e}")
+            return []
+    
+    def set_fen(self, fen):
+        """Set the current FEN and update the board display"""
+        self.current_fen = fen
+        self.update_board_from_fen(fen)
+    
+    def update_board_from_fen(self, fen):
+        """Update the internal board array from a FEN string"""
+        if not HAS_CHESS:
+            return
+        
+        try:
+            board = chess.Board(fen)
+            
+            # Clear board
+            self.board = [[' ' for _ in range(8)] for _ in range(8)]
+            
+            # Piece map from python-chess
+            piece_map = board.piece_map()
+            for square, piece in piece_map.items():
+                # chess.square gives us 0-63, need to convert to row, col
+                col = square % 8
+                row = 7 - (square // 8)  # Flip because chess uses rank 1 at bottom
+                
+                # Get piece symbol (uppercase=white, lowercase=black)
+                symbol = piece.symbol()
+                self.board[row][col] = symbol
+                
+        except Exception as e:
+            print(f"Error updating board from FEN: {e}")
+    
+    def clear_selection(self):
+        """Clear the selected square and highlights"""
+        self.selected_square = None
+        self.highlighted_squares = []
