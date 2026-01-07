@@ -228,6 +228,8 @@ class LobbyScreen:
         self.client.set_callback('LOBBY_LIST', self.on_player_list)
         self.client.set_callback('MATCH_START', self.on_game_start_msg)
         self.client.set_callback('CHALLENGE_NOTIFY', self.on_challenge_received)
+        self.client.set_callback('CHALLENGE_RESP', self.on_challenge_response)
+        self.client.set_callback('ERROR', self.on_error_response)
     
     def refresh_players(self):
         """Refresh player list"""
@@ -321,13 +323,23 @@ class LobbyScreen:
 
     def on_game_start_msg(self, msg):
         """Handle game start message"""
+        print(f"DEBUG: MATCH_START received: {msg}")
         payload = msg.get('payload', {})
         game_id = payload.get('game_id')
-        opponent = payload.get('opponent')
+        opponent_id = payload.get('opponent_id')
         your_color = payload.get('your_color', 'white')
         opponent_elo = payload.get('opponent_elo', 1200)
         
+        # Look up opponent username from players_data
+        opponent = f"Player {opponent_id}"
+        for player in self.players_data:
+            if player.get('player_id') == opponent_id:
+                opponent = player.get('username', opponent)
+                opponent_elo = player.get('elo', 1200)
+                break
+        
         self.log(f"Game starting vs {opponent}!")
+        print(f"DEBUG: Starting game - ID: {game_id}, opponent: {opponent}, color: {your_color}")
         self.hide()
         self.on_game_start(game_id, opponent, your_color, opponent_elo)
     
@@ -359,6 +371,29 @@ class LobbyScreen:
         else:
             # Decline - just don't respond (or send decline)
             self.log(f"Declined challenge from {challenger_name}")
+    
+    def on_challenge_response(self, msg):
+        """Handle challenge response (for debugging)"""
+        print(f"DEBUG: CHALLENGE_RESP received: {msg}")
+        payload = msg.get('payload', {})
+        
+        # Check if this is actually a MATCH_START in disguise or an error
+        if payload.get('status') == 'declined':
+            self.log("Your challenge was declined.")
+        elif payload.get('game_id'):
+            # This might be a game start disguised as CHALLENGE_RESP
+            print(f"DEBUG: Found game_id in CHALLENGE_RESP, treating as game start")
+            self.on_game_start_msg(msg)
+        else:
+            self.log(f"Challenge response: {payload}")
+    
+    def on_error_response(self, msg):
+        """Handle error response"""
+        print(f"DEBUG: ERROR received: {msg}")
+        payload = msg.get('payload', {})
+        reason = payload.get('reason', 'Unknown error')
+        self.log(f"Error: {reason}")
+        messagebox.showerror("Error", reason)
     
     def log(self, message):
         """Add message to log"""

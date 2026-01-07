@@ -108,7 +108,14 @@ bool GameClient::acceptChallenge(const std::string &challengeId)
 {
     Json::Value msg;
     msg["messageType"] = "CHALLENGE_RESP";
-    msg["payload"]["challenge_id"] = challengeId;
+    // Send challenger_id as an integer - the server expects this field
+    try {
+        int challengerIdInt = std::stoi(challengeId);
+        msg["payload"]["challenger_id"] = challengerIdInt;
+    } catch (...) {
+        // Fallback to string if conversion fails
+        msg["payload"]["challenger_id"] = challengeId;
+    }
     msg["payload"]["accepted"] = true;
 
     return netClient->sendMessage(msg);
@@ -118,7 +125,14 @@ bool GameClient::declineChallenge(const std::string &challengeId)
 {
     Json::Value msg;
     msg["messageType"] = "CHALLENGE_RESP";
-    msg["payload"]["challenge_id"] = challengeId;
+    // Send challenger_id as an integer - the server expects this field
+    try {
+        int challengerIdInt = std::stoi(challengeId);
+        msg["payload"]["challenger_id"] = challengerIdInt;
+    } catch (...) {
+        // Fallback to string if conversion fails
+        msg["payload"]["challenger_id"] = challengeId;
+    }
     msg["payload"]["accepted"] = false;
 
     return netClient->sendMessage(msg);

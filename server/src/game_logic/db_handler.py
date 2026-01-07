@@ -68,19 +68,31 @@ def insert_move(game_id, player_id, move_notation):
     conn.close()
 
 
-def create_game(white_id, black_id, mode, time_limit):
+def create_game(white_id, black_id, mode='RAPID', time_limit=None):
     """
     Create a new game with specified mode and time limit.
-    time_limit should be in seconds.
+    time_limit should be in seconds. If not provided, defaults based on mode.
     """
+    import datetime
+    
+    # Default time limits based on mode
+    if time_limit is None:
+        mode_times = {
+            "BLITZ": 300.0,      # 5 mins
+            "RAPID": 600.0,      # 10 mins
+            "CLASSICAL": 1800.0  # 30 mins
+        }
+        time_limit = mode_times.get(mode.upper(), 600.0)
+    
     conn = get_connection()
     cur = conn.cursor()
+    start_time = datetime.datetime.utcnow().isoformat()
     cur.execute(
         """
-        INSERT INTO Game (white_id, black_id, mode, white_time, black_time, status)
-        VALUES (?, ?, ?, ?, ?, 'ONGOING')
+        INSERT INTO Game (white_id, black_id, mode, white_time, black_time, status, start_time, current_fen)
+        VALUES (?, ?, ?, ?, ?, 'ONGOING', ?, ?)
         """,
-        (white_id, black_id, mode, time_limit, time_limit)
+        (white_id, black_id, mode, time_limit, time_limit, start_time, INITIAL_FEN)
     )
     game_id = cur.lastrowid
     conn.commit()
@@ -398,26 +410,3 @@ def get_lobby_players():
         ]
     finally:
         conn.close()
-
-
-def create_game(white_id, black_id, mode='ranked'):
-    """
-    Create a new game in the database.
-    """
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        start_time = datetime.datetime.utcnow().isoformat()
-        cur.execute(
-            """
-            INSERT INTO Game (white_id, black_id, mode, start_time, status, current_fen)
-            VALUES (?, ?, ?, ?, 'ACTIVE', ?)
-            """,
-            (white_id, black_id, mode, start_time, INITIAL_FEN)
-        )
-        game_id = cur.lastrowid
-        conn.commit()
-        return game_id
-    finally:
-        conn.close()
-
