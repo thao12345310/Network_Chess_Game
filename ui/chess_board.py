@@ -19,8 +19,8 @@ class ChessBoard:
     
     # Unicode chess pieces
     PIECES = {
-        'R': '♜', 'N': '♞', 'B': '♝', 'Q': '♛', 'K': '♚', 'P': '♟',
-        'r': '♖', 'n': '♘', 'b': '♗', 'q': '♕', 'k': '♔', 'p': '♙'
+        'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙',
+        'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟'
     }
     
     def __init__(self, canvas, square_size=80):
@@ -30,7 +30,13 @@ class ChessBoard:
         self.highlighted_squares = []  # List of (row, col) for valid moves
         self.board = self.init_board()
         self.current_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        self.is_flipped = False
     
+    def set_flipped(self, flipped):
+        """Set board orientation (True for Black at bottom)"""
+        self.is_flipped = flipped
+        self.draw()
+
     def init_board(self):
         """Initialize chess board"""
         board = [
@@ -51,20 +57,30 @@ class ChessBoard:
         self.selected_square = None
         self.highlighted_squares = []
         self.current_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        self.is_flipped = False
     
     def draw(self):
         """Draw chess board on canvas"""
         self.canvas.delete("all")
         
         # Draw squares
-        for row in range(8):
-            for col in range(8):
-                x1 = col * self.square_size
-                y1 = row * self.square_size
+        for v_row in range(8):
+            for v_col in range(8):
+                # Calculate logical coordinates
+                if self.is_flipped:
+                    row, col = 7 - v_row, 7 - v_col
+                else:
+                    row, col = v_row, v_col
+                
+                x1 = v_col * self.square_size
+                y1 = v_row * self.square_size
                 x2 = x1 + self.square_size
                 y2 = y1 + self.square_size
                 
-                # Base color
+                # Base color - Check based on logical or visual? 
+                # Visual check maintains checkerboard pattern relative to screen.
+                # Logical check maintains checkerboard relative to board (h1 is always light).
+                # (row+col)%2 == 0 -> Light.
                 color = "#F0D9B5" if (row + col) % 2 == 0 else "#B58863"
                 
                 # Highlight selected square
@@ -112,25 +128,30 @@ class ChessBoard:
         # Draw coordinates
         for i in range(8):
             # Files (a-h)
+            label = chr(97 + (7 - i if self.is_flipped else i)) # h..a if flipped, a..h if normal
             self.canvas.create_text(
                 i * self.square_size + self.square_size/2, 8 * self.square_size + 15,
-                text=chr(97 + i), font=("Arial", 12)
+                text=label, font=("Arial", 12)
             )
             # Ranks (1-8)
+            label = str(i + 1 if self.is_flipped else 8 - i) # 1..8 if flipped, 8..1 if normal
             self.canvas.create_text(
                 -15, i * self.square_size + self.square_size/2,
-                text=str(8 - i), font=("Arial", 12)
+                text=label, font=("Arial", 12)
             )
     
     def get_square_from_coords(self, x, y):
         """Convert canvas coordinates to board square"""
-        col = x // self.square_size
-        row = y // self.square_size
+        v_col = x // self.square_size
+        v_row = y // self.square_size
         
-        if row < 0 or row > 7 or col < 0 or col > 7:
+        if v_row < 0 or v_row > 7 or v_col < 0 or v_col > 7:
             return None
         
-        return (row, col)
+        if self.is_flipped:
+            return (7 - v_row, 7 - v_col)
+        
+        return (v_row, v_col)
     
     def pos_to_notation(self, row, col):
         """Convert position to chess notation (e.g., e2)"""
