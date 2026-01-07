@@ -4,7 +4,7 @@ from database import get_connection
 from init_db import INITIAL_FEN
 import datetime
 
-def register_user(username, password, email):
+def register_user(username, password):
     conn = get_connection()
     try:
         cur = conn.cursor()
@@ -14,8 +14,8 @@ def register_user(username, password, email):
             return None # Username taken
             
         cur.execute(
-            "INSERT INTO Player (username, password, email, elo) VALUES (?, ?, ?, 1200)",
-            (username, password, email)
+            "INSERT INTO Player (username, password, elo) VALUES (?, ?, 1200)",
+            (username, password)
         )
         pid = cur.lastrowid
         conn.commit()

@@ -56,14 +56,12 @@ bool GameClient::login(const std::string &username, const std::string &password)
 }
 
 bool GameClient::registerAccount(const std::string &username,
-                                 const std::string &password,
-                                 const std::string &email)
+                                 const std::string &password)
 {
     Json::Value msg;
     msg["messageType"] = "AUTH_REGISTER_REQ";
     msg["payload"]["username"] = username;
     msg["payload"]["password"] = password;
-    msg["payload"]["email"] = email;
 
     return netClient->sendMessage(msg);
 }
@@ -277,8 +275,9 @@ void GameClient::processMessage(const Json::Value &msg)
     {
         // Maybe trigger game update or just log?
         // Usually UI updates status
-        if (onGameUpdate) {
-             onGameUpdate(msg);
+        if (onGameUpdate)
+        {
+            onGameUpdate(msg);
         }
     }
     else if (type == "ERROR")

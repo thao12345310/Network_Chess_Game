@@ -111,7 +111,7 @@ bool NetworkClient::sendMessage(const Json::Value &message)
 
     // Serialize JSON to string (compact format, single line)
     Json::StreamWriterBuilder writer;
-    writer["indentation"] = "";  // Ensure compact format (no pretty printing)
+    writer["indentation"] = ""; // Ensure compact format (no pretty printing)
     std::string jsonStr = Json::writeString(writer, message);
 
     // Add delimiter (newline) for message framing
@@ -153,8 +153,11 @@ Json::Value NetworkClient::receiveMessage()
     std::string data = receiveRaw();
     if (data.empty())
     {
+        std::cerr << "DEBUG: Received empty data from server" << std::endl;
         return Json::Value();
     }
+
+    std::cout << "DEBUG: Received raw data: [" << data << "]" << std::endl;
 
     // Parse JSON
     Json::CharReaderBuilder reader;
@@ -165,6 +168,7 @@ Json::Value NetworkClient::receiveMessage()
     if (!Json::parseFromStream(reader, iss, &message, &errors))
     {
         std::cerr << "JSON parse error: " << errors << std::endl;
+        std::cerr << "DEBUG: Failed to parse data: [" << data << "]" << std::endl;
         return Json::Value();
     }
 

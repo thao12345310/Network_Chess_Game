@@ -30,7 +30,7 @@ void client_set_error_callback(ClientHandle handle, CErrorCallback callback);
 
 // Authentication
 int client_login(ClientHandle handle, const char* username, const char* password);
-int client_register(ClientHandle handle, const char* username, const char* password, const char* email);
+int client_register(ClientHandle handle, const char* username, const char* password);
 void client_logout(ClientHandle handle);
 
 // Lobby operations

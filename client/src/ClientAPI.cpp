@@ -183,12 +183,12 @@ extern "C"
         return wrapper->client->login(username, password) ? 1 : 0;
     }
 
-    int client_register(ClientHandle handle, const char *username, const char *password, const char *email)
+    int client_register(ClientHandle handle, const char *username, const char *password)
     {
         if (!handle)
             return 0;
         ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
-        return wrapper->client->registerAccount(username, password, email ? email : "") ? 1 : 0;
+        return wrapper->client->registerAccount(username, password) ? 1 : 0;
     }
 
     void client_logout(ClientHandle handle)

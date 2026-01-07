@@ -50,14 +50,26 @@ def main():
             payload = req.get('payload', {})
             user = req.get('username') or payload.get('username')
             pw = req.get('password') or payload.get('password')
-            email = req.get('email') or payload.get('email', '')
-            pid = register_user(user, pw, email)
+            pid = register_user(user, pw)
             if pid:
-                response = {"messageType": "AUTH_REGISTER_ACK", "status": "success", "player_id": pid}
+                response = {
+                    "messageType": "AUTH_REGISTER_ACK",
+                    "responseCode": 201,
+                    "payload": {
+                        "user_id": pid,
+                        "username": user
+                    }
+                }
             else:
-                response = {"messageType": "AUTH_REGISTER_ACK", "status": "error", "message": "Username taken or error"}
+                response = {
+                    "messageType": "AUTH_REGISTER_ACK",
+                    "responseCode": 409,
+                    "payload": {
+                        "reason": "Username taken or error"
+                    }
+                }
 
-        if action == 'LOGIN' or action == 'AUTH_LOGIN_REQ':
+        elif action == 'LOGIN' or action == 'AUTH_LOGIN_REQ':
             payload = req.get('payload', {})
             # Try top level, then payload
             user = req.get('username') or payload.get('username')

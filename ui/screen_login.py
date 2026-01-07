@@ -121,18 +121,7 @@ class LoginScreen:
                                        show='●', width=30, 
                                        relief='solid', bd=1)
         self.password_entry.pack(fill='x', pady=5, ipady=5)
-        
-        # Email (for register)
-        self.email_frame = tk.Frame(form_frame, bg='#ECF0F1')
-        
-        tk.Label(self.email_frame, text="Email (for registration)", 
-                font=("Arial", 10), 
-                fg='#2C3E50', bg='#ECF0F1').pack(anchor='w')
-        
-        self.email_entry = tk.Entry(self.email_frame, font=("Arial", 12), 
-                                    width=30, relief='solid', bd=1)
-        self.email_entry.pack(fill='x', pady=5, ipady=5)
-        
+
         # Buttons
         btn_frame = tk.Frame(form_frame, bg='#ECF0F1')
         btn_frame.pack(pady=20, fill='x', padx=50)
@@ -174,13 +163,11 @@ class LoginScreen:
             self.login_btn.config(text="Login", bg='#27AE60', 
                                  activebackground='#229954')
             self.toggle_btn.config(text="Sign Up")
-            self.email_frame.pack_forget()
         else:
             # Register mode
             self.login_btn.config(text="Register", bg='#E74C3C',
                                  activebackground='#C0392B')
             self.toggle_btn.config(text="Login")
-            self.email_frame.pack(pady=10, fill='x', padx=50)
     
     def do_connect(self):
         """Connect to server"""
@@ -226,13 +213,8 @@ class LoginScreen:
             self.client.login(username, password)
         else:
             # Register
-            email = self.email_entry.get()
-            if not email:
-                messagebox.showwarning("Warning", "Please enter email")
-                return
-            
             self.client.set_callback('AUTH_REGISTER_ACK', self.on_register_response)
-            self.client.register(username, password, email)
+            self.client.register(username, password)
     
     def on_login_response(self, msg):
         """Handle login response"""

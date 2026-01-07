@@ -75,7 +75,7 @@ class ChessClient:
         lib.client_login.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
         lib.client_login.restype = ctypes.c_int
         
-        lib.client_register.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+        lib.client_register.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
         lib.client_register.restype = ctypes.c_int
         
         lib.client_request_player_list.argtypes = [ctypes.c_void_p]
@@ -231,15 +231,14 @@ class ChessClient:
         )
         return result == 1
     
-    def register(self, username, password, email=''):
+    def register(self, username, password):
         """Register new account"""
         if not self.handle:
             return False
         result = self.lib.client_register(
             self.handle,
             username.encode('utf-8'),
-            password.encode('utf-8'),
-            email.encode('utf-8')
+            password.encode('utf-8')
         )
         return result == 1
     
