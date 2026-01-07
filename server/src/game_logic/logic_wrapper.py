@@ -293,19 +293,22 @@ def main():
 
         # ========== Client Protocol: MOVE Handler ==========
         
-        elif action == 'MOVE':
+        elif action == 'MOVE' or action == 'MOVE_REQ':
             # Format from client: {"type": "MOVE", "game_id": "123", "from": "e2", "to": "e4"}
+            # OR {"type": "MOVE", "payload": {"game_id": "123", "from": "e2", "to": "e4"}}
             
             # Get request data
-            game_id = req.get('game_id')
-            from_pos = req.get('from')
-            to_pos = req.get('to')
+            payload = req.get('payload', {})
+            game_id = req.get('game_id') or payload.get('game_id')
+            from_pos = req.get('from') or payload.get('from')
+            to_pos = req.get('to') or payload.get('to')
             
             # Validate required fields
             if not game_id or (isinstance(game_id, str) and game_id.strip() == ""):
                 response = {
-                    "type": "MOVE_RESULT",
+                    "messageType": "MOVE_ACK",
                     "status": "error",
+                    "success": False,
                     "message": "Missing or empty 'game_id' in MOVE request. Please set game_id first."
                 }
                 print(json.dumps(response))
@@ -313,8 +316,9 @@ def main():
             
             if not from_pos or not to_pos:
                 response = {
-                    "type": "MOVE_RESULT",
+                    "messageType": "MOVE_ACK",
                     "status": "error",
+                    "success": False,
                     "message": "Missing 'from' or 'to' in MOVE request"
                 }
                 print(json.dumps(response))
@@ -328,8 +332,9 @@ def main():
                 game_info = get_game_info(game_id_int)
                 if not game_info:
                     response = {
-                        "type": "MOVE_RESULT",
+                        "messageType": "MOVE_ACK",
                         "status": "error",
+                        "success": False,
                         "message": f"Game ID {game_id_int} does not exist."
                     }
                     print(json.dumps(response))
@@ -393,14 +398,16 @@ def main():
                         datetime.datetime.utcnow().isoformat()
                     )
                     response = {
-                        "type": "MOVE_RESULT",
+                        "messageType": "MOVE_ACK",
                         "status": "success",
+                        "success": True,
                         "is_valid": False, 
                         "message": "Timeout",
                         "game_result": "timeout",
                         "winner_id": timeout_winner,
                          "white_time": white_time,
-                        "black_time": black_time
+                        "black_time": black_time,
+                         "opponent_id": white_id if timeout_winner == black_id else black_id # Approximate
                     }
                     print(json.dumps(response))
                     return
@@ -428,7 +435,7 @@ def main():
                     
                     if not current_player_id:
                          # Fallback error handling if something is weird
-                        response = {"type": "MOVE_RESULT", "status": "error", "message": "Could not determine turn"}
+                        response = {"messageType": "MOVE_ACK", "status": "error", "success": False, "message": "Could not determine turn"}
                         print(json.dumps(response))
                         return
                     
@@ -455,15 +462,26 @@ def main():
                             datetime.datetime.utcnow().isoformat()
                         )
                     
+                    # Return opponent_id for broadcasting
+                    opponent_id = white_id if current_player_id == black_id else black_id
+
                     # Success response
                     response = {
-                        "type": "MOVE_RESULT",
+                        "messageType": "MOVE_ACK",
                         "status": "success",
+                        "success": True,
                         "is_valid": True,
                         "next_fen": next_fen,
                         "game_result": game_result,
                         "white_time": white_time,
-                        "black_time": black_time
+                        "black_time": black_time,
+                        "from": from_pos,
+                        "to": to_pos,
+                        "opponent_id": opponent_id,
+                        "last_move": {
+                             "from": from_pos,
+                             "to": to_pos
+                        }
                     }
                 else:
                     # Invalid move
@@ -472,8 +490,9 @@ def main():
                     # Online, usually we don't deduct time for invalid inputs immediately (latency),
                     # or we do? Let's keep the time deduction because they spent time thinking and sent a bad move.
                     response = {
-                        "type": "MOVE_RESULT",
+                        "messageType": "MOVE_ACK",
                         "status": "error",
+                        "success": False,
                         "is_valid": False,
                         "message": "Invalid move",
                         "white_time": white_time,
@@ -482,14 +501,16 @@ def main():
                     
             except ValueError:
                 response = {
-                    "type": "MOVE_RESULT",
+                    "messageType": "MOVE_ACK",
                     "status": "error",
+                    "success": False,
                     "message": "Invalid game_id format. Must be a number."
                 }
             except Exception as e:
                 response = {
-                    "type": "MOVE_RESULT",
+                    "messageType": "MOVE_ACK",
                     "status": "error",
+                    "success": False,
                     "message": f"Error processing move: {str(e)}"
                 }
 

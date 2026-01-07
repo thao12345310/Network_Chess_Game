@@ -205,6 +205,7 @@ class GameScreen:
     
     def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo):
         """Initialize game with data"""
+        print(f"DEBUG: start_game called. Game: {game_id}, Me: {self.client.username}, Color: '{your_color}'")
         self.game_id = game_id
         self.opponent_name = opponent
         self.player_color = your_color
@@ -223,14 +224,50 @@ class GameScreen:
         
         self.game_title.config(text=f"Game vs {opponent}")
         
+        
         # Reset board
         self.chess_board.reset()
         self.chess_board.draw()
         
+        # Set initial turn label
+        # Standard chess: White always moves first
+        is_white_turn = True 
+        is_your_turn = (self.player_color == 'white')
+        print(f"DEBUG: Initial turn check. Me: {self.player_color}. My turn? {is_your_turn}")
+        
+        if is_your_turn:
+            self.turn_label.config(text="Your turn", fg='#27AE60')
+        else:
+            self.turn_label.config(text="Opponent's turn", fg='#E74C3C')
+        
+        # Flip board if playing Black
+        self.chess_board.set_flipped(self.player_color == 'black')
+        self.chess_board.draw()
+
         # Clear moves
         self.moves_text.config(state='normal')
         self.moves_text.delete('1.0', 'end')
         self.moves_text.config(state='disabled')
+        
+        self.update_turn_label()
+
+    def update_turn_label(self):
+        """Update turn label based on current state"""
+        # Determine turn from FEN
+        fen = self.chess_board.current_fen
+        is_white_turn = True
+        if fen:
+            parts = fen.split()
+            if len(parts) > 1 and parts[1] == 'b':
+                is_white_turn = False
+        
+        is_your_turn = (self.player_color == 'white' and is_white_turn) or \
+                       (self.player_color == 'black' and not is_white_turn)
+        
+        if is_your_turn:
+            self.turn_label.config(text="Your turn", fg='#27AE60')
+        else:
+            self.turn_label.config(text="Opponent's turn", fg='#E74C3C')
     
     def on_square_click(self, event):
         """Handle board square click"""
@@ -240,6 +277,7 @@ class GameScreen:
         
         row, col = square
         piece = self.chess_board.get_piece(row, col)
+        print(f"DEBUG: Click at {row},{col}. Piece: '{piece}'")
         
         if self.chess_board.selected_square is None:
             # Select piece - but only if it's the player's piece
@@ -253,6 +291,13 @@ class GameScreen:
                     # Get and highlight valid moves
                     valid_moves = self.chess_board.get_valid_moves(row, col)
                     self.chess_board.highlighted_squares = valid_moves
+                    self.chess_board.draw()
+                else:
+                    # Trying to select opponent's piece
+                    print(f"DEBUG: Rejected selection. Piece: {piece}, Me: {self.player_color}")
+                    self.turn_label.config(text="Not your piece!", fg='orange')
+                    # Restore label after 1 second
+                    self.root.after(1000, self.update_turn_label)
         else:
             # Check if clicking the same square to deselect
             if self.chess_board.selected_square == (row, col):
@@ -265,12 +310,17 @@ class GameScreen:
                 to_pos = self.chess_board.pos_to_notation(row, col)
                 
                 # Update local board
-                self.chess_board.make_move(from_row, from_col, row, col)
+                # self.chess_board.make_move(from_row, from_col, row, col) # Disabled for "Check then Move"
                 
+                # Send to server
+                # Send to server
                 # Send to server
                 if self.client.connected and self.game_id:
                     self.client.make_move(self.game_id, from_pos, to_pos)
-                    self.add_move(from_pos, to_pos)
+                
+                # Clear selection immediately to prevent double submissions
+                self.chess_board.clear_selection()
+                self.chess_board.draw()
             else:
                 # Clicking on another piece of the same color - select it instead
                 if piece and piece != ' ':
@@ -313,22 +363,60 @@ class GameScreen:
         """Open chat (placeholder)"""
         messagebox.showinfo("Chat", "Chat feature coming soon!")
     
+    
     def on_move_response(self, msg):
         """Handle move response"""
-        if not msg.get('success'):
-            error = msg.get('message', 'Invalid move')
+        payload = msg.get('payload', {})
+        # Check success in payload (logic_wrapper now sends success: True)
+        # OR check status if success field not present
+        is_success = msg.get('success') or payload.get('success') or payload.get('status') == 'success'
+        
+        if not is_success:
+            error = msg.get('message') or payload.get('message') or 'Invalid move'
             messagebox.showerror("Invalid Move", error)
-            # Revert board
-            self.chess_board.reset()
+            # Revert board - Clear selection
+            self.chess_board.clear_selection()
             self.chess_board.draw()
+        else:
+            # Valid move confirmed by server
+            # Update board state
+            next_fen = payload.get('next_fen') or msg.get('next_fen')
+            if next_fen:
+                self.chess_board.set_fen(next_fen)
+                self.chess_board.draw()
+                
+                # Add to history
+                from_pos = payload.get('from') or msg.get('from')
+                to_pos = payload.get('to') or msg.get('to')
+                if from_pos and to_pos:
+                     self.add_move(from_pos, to_pos)
+            else:
+                 # Fallback if no FEN: maybe just make the move?
+                 # But we don't have from/to easily here unless we stored it.
+                 pass
     
     def on_game_update(self, msg):
         """Handle game update"""
-        move = msg.get('last_move')
+        payload = msg.get('payload', {})
+        move = payload.get('last_move') or msg.get('last_move') # Protocol: payload.last_move or top level?
+        # My NetworkInterface sends `payload: {last_move: {...}, fen: ...}`. 
+        # But `on_game_update_callback` in client might unwrap it?
+        # Let's handle both.
+        
         if move:
             # Opponent's move
-            self.add_move(move.get('from', '?'), move.get('to', '?'))
-            # TODO: Update board from server state
+            from_pos = move.get('from', '?')
+            to_pos = move.get('to', '?')
+            # self.add_move(from_pos, to_pos) # Don't add move yet if we update FEN, or add it here?
+            # Ideally update board FEN, then log move.
+            
+            # Update board from server state
+            fen = payload.get('fen')
+            if fen:
+                self.chess_board.set_fen(fen)
+                self.chess_board.draw()
+            
+            self.add_move(from_pos, to_pos)
     
     def on_emoji_update(self, msg):
         """Handle emoji/chat update from opponent"""

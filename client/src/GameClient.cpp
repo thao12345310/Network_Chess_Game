@@ -142,9 +142,14 @@ bool GameClient::sendMove(const std::string &fromPos, const std::string &toPos)
 {
     Json::Value msg;
     msg["messageType"] = "MOVE_REQ";
+    try {
+        msg["payload"]["game_id"] = std::stoi(currentGameId);
+    } catch (...) {
+        msg["payload"]["game_id"] = 0;
+    }
     msg["payload"]["from"] = fromPos;
     msg["payload"]["to"] = toPos;
-    msg["payload"]["promotion"] = Json::Value::null;
+    // msg["payload"]["promotion"] = Json::Value::null;
 
     return netClient->sendMessage(msg);
 }

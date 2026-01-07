@@ -562,6 +562,43 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                  std::cout << "Player " << pid << " added to lobby" << std::endl;
              }
         }
+        else if (resType == "MOVE_ACK") {
+             std::string success_str = get_json_string(result, "success");
+             bool is_success = (success_str == "true" || result.find("\"success\": true") != std::string::npos || result.find("\"success\":true") != std::string::npos);
+             
+             if (is_success) {
+                  int opponent_id = get_json_int(result, "opponent_id");
+                  std::string from_pos = get_json_string(result, "from");
+                  std::string to_pos = get_json_string(result, "to");
+                  std::string next_fen = get_json_string(result, "next_fen");
+                  
+                  // Construct MOVE_UPDATE
+                  // We should ideally extract the whole payload or reconstruct it
+                  // For now, let's just make a simple update message
+                  
+                  if (opponent_id > 0) {
+                      std::lock_guard<std::mutex> lock(session_mutex);
+                      SOCKET opponentSocket = INVALID_SOCKET;
+                      for (auto const& [sock, pid] : client_sessions) {
+                          if (pid == opponent_id) {
+                              opponentSocket = sock;
+                              break;
+                          }
+                      }
+                      
+                      if (opponentSocket != INVALID_SOCKET) {
+                           // Broadcast MOVE_UPDATE
+                           std::string update_msg = "{\"messageType\": \"MOVE_UPDATE\", \"responseCode\": 200, \"payload\": {"
+                                                    "\"last_move\": {\"from\": \"" + from_pos + "\", \"to\": \"" + to_pos + "\"}, "
+                                                    "\"fen\": \"" + next_fen + "\", "
+                                                    "\"status\": \"update\"}}";
+                           send(opponentSocket, update_msg.c_str(), static_cast<int>(update_msg.length()), 0);
+                           send(opponentSocket, "\n", 1, 0);
+                           std::cout << "Broadcasted MOVE_UPDATE to player " << opponent_id << std::endl;
+                      }
+                  }
+             }
+        }
     }
 
     return result;
