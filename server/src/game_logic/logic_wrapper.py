@@ -14,7 +14,7 @@ from db_handler import (
     get_player_rating, update_both_players_elo, get_game_details,
     add_to_lobby, remove_from_lobby, get_lobby_players, create_game,
     register_user, verify_user, get_player_id_by_username,
-    get_game_time, update_game_time, create_game
+    get_game_time, update_game_time
 )
 import datetime
 import time
@@ -278,16 +278,6 @@ def main():
         elif action == 'get_ready_players' or action == 'GET_PLAYER_LIST':
             players = get_lobby_players()
             response = {"type": "PLAYER_LIST", "status": "success", "players": players}
-
-        elif action == 'create_game':
-            white_id = req.get('white_id')
-            black_id = req.get('black_id')
-            mode = req.get('mode', 'ranked')
-            if not white_id or not black_id:
-                response = {"status": "error", "message": "Missing white_id or black_id"}
-            else:
-                gid = create_game(white_id, black_id, mode)
-                response = {"status": "success", "game_id": gid}
 
         # ========== Client Protocol: MOVE Handler ==========
         

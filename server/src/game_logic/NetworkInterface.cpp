@@ -378,21 +378,31 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
     else if (action == "accept_challenge" || type == "accept_challenge" || 
              type == "CHALLENGE_RESP" || action == "CHALLENGE_RESP") {
         
+        std::cout << "DEBUG: Entered CHALLENGE_RESP handler" << std::endl;
+        
         // Check if this is accept or decline
         std::string accepted_str = get_json_string(request, "accepted");
         bool is_accepted = (accepted_str == "true" || accepted_str.empty()); // Default to accept if not specified
         
-        // Also check payload.accepted for nested format
+        // Also check payload.accepted for nested format - look for true as well
         if (request.find("\"accepted\": false") != std::string::npos || 
             request.find("\"accepted\":false") != std::string::npos) {
             is_accepted = false;
         }
+        // Also check for true to confirm acceptance
+        if (request.find("\"accepted\":true") != std::string::npos ||
+            request.find("\"accepted\": true") != std::string::npos) {
+            is_accepted = true;
+        }
+        
+        std::cout << "DEBUG: is_accepted = " << (is_accepted ? "true" : "false") << std::endl;
         
         // Get challenger ID - try multiple fields
         int challenger_id = get_json_int(request, "challenger_id");
         if (challenger_id == 0) challenger_id = get_json_int(request, "from_id");
         if (challenger_id == 0) challenger_id = get_json_int(request, "challenge_id"); // Sometimes challenge_id is the sender's ID
         
+        std::cout << "DEBUG: challenger_id = " << challenger_id << std::endl;
         int my_id = 0;
         {
             std::lock_guard<std::mutex> lock(session_mutex);
@@ -425,10 +435,14 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         
         // Accept challenge - Create Game
         std::string create_req = "{\"action\": \"create_game\", \"white_id\": " + std::to_string(challenger_id) + ", \"black_id\": " + std::to_string(my_id) + ", \"mode\": \"RAPID\"}";
+        std::cout << "DEBUG: Creating game with: " << create_req << std::endl;
         std::string create_res = execute_logic_command(create_req);
+        std::cout << "DEBUG: Python response: " << create_res << std::endl;
 
         int game_id = get_json_int(create_res, "game_id");
+        std::cout << "DEBUG: Parsed game_id: " << game_id << std::endl;
         if (game_id == 0) {
+             std::cout << "ERROR: Game creation failed!" << std::endl;
              return "{\"messageType\": \"ERROR\", \"responseCode\": 500, \"payload\": {\"reason\": \"Failed to create game\"}}";
         }
 

@@ -178,10 +178,16 @@ class ChessClient:
         try:
             msg = json.loads(json_msg.decode('utf-8'))
             msg_type = msg.get('messageType', '')
+            print(f"DEBUG: Game update received - type: {msg_type}")
             if msg_type in self.callbacks:
+                print(f"DEBUG: Calling callback for {msg_type}")
                 self.callbacks[msg_type](msg)
+            else:
+                print(f"WARNING: No callback registered for game update: {msg_type}")
         except Exception as e:
+            import traceback
             print(f"Game update callback error: {e}")
+            print(f"Traceback: {traceback.format_exc()}")
     
     def _on_player_list_callback(self, json_msg):
         """Handle player list from C++"""
