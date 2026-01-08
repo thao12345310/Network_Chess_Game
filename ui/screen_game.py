@@ -12,10 +12,11 @@ from chess_board import ChessBoard
 class GameScreen:
     """Màn hình chơi game"""
     
-    def __init__(self, root, client, on_game_end):
+    def __init__(self, root, client, on_game_end, appearance_settings=None):
         self.root = root
         self.client = client
         self.on_game_end = on_game_end
+        self.appearance_settings = appearance_settings
         
         # Game state
         self.game_id = None
@@ -26,6 +27,9 @@ class GameScreen:
         
         # Store original MATCH_START callback from Lobby (to restore later)
         self.lobby_match_start_callback = None
+        
+        # Track active rematch dialog to close it when opponent requests
+        self.active_rematch_dialog = None
         
         # Main frame
         self.frame = tk.Frame(root, bg='#ECF0F1')
@@ -149,8 +153,9 @@ class GameScreen:
         self.board_canvas.pack()
         self.board_canvas.bind("<Button-1>", self.on_square_click)
         
-        # Initialize chess board
-        self.chess_board = ChessBoard(self.board_canvas, square_size=80)
+        # Initialize chess board with appearance settings
+        self.chess_board = ChessBoard(self.board_canvas, square_size=80, 
+                                      appearance_settings=self.appearance_settings)
         self.chess_board.draw()
         
         # Control buttons
@@ -222,23 +227,27 @@ class GameScreen:
         # NOTE: DO NOT register MATCH_START here - it will override Lobby's callback
         # MATCH_START for rematch is registered dynamically when needed
     
-    def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo, time_control="10+0"):
+    def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo, time_control="10+0", is_rematch=False):
         """Initialize game with data"""
-        print(f"DEBUG: start_game called. Game: {game_id}, Me: {self.client.username}, Color: '{your_color}', TC: {time_control}")
+        print(f"DEBUG: start_game called. Game: {game_id}, Me: {self.client.username}, Color: '{your_color}', TC: {time_control}, Rematch: {is_rematch}")
         self.game_id = game_id
         self.opponent_name = opponent
         self.player_color = your_color
         self.opponent_elo = opponent_elo
         self.player_elo = player_elo
         
-        # Save Lobby's MATCH_START callback before overriding it
-        if 'MATCH_START' in self.client.callbacks and self.lobby_match_start_callback is None:
-            self.lobby_match_start_callback = self.client.callbacks['MATCH_START']
-            print("DEBUG: Saved Lobby's MATCH_START callback")
-        
-        # Register our MATCH_START callback now (for rematch)
-        self.client.set_callback('MATCH_START', self.on_match_start)
-        print("DEBUG: Registered GameScreen's MATCH_START callback")
+        # Only register MATCH_START callback on first game start (not rematch)
+        if not is_rematch:
+            # Save Lobby's MATCH_START callback before overriding it
+            if 'MATCH_START' in self.client.callbacks and self.lobby_match_start_callback is None:
+                self.lobby_match_start_callback = self.client.callbacks['MATCH_START']
+                print("DEBUG: Saved Lobby's MATCH_START callback")
+            
+            # Register our MATCH_START callback now (for rematch)
+            self.client.set_callback('MATCH_START', self.on_match_start)
+            print("DEBUG: Registered GameScreen's MATCH_START callback")
+        else:
+            print("DEBUG: Rematch - callback already registered, skipping")
         
         # Update UI
         self.player_name_label.config(text=f"👤 {self.client.username}")
@@ -548,19 +557,108 @@ class GameScreen:
         else:  # loss
             result_text = f"😞 You Lost\n\n{reason}\n\nELO: {self.player_elo} → {new_elo} ({elo_change})"
         
-        # Ask for rematch
-        result_text += "\n\nDo you want to request a rematch?"
+        # Show custom dialog for rematch request
+        self.show_rematch_dialog(result_text, new_elo)
+    
+    def show_rematch_dialog(self, result_text, new_elo):
+        """Show custom dialog for rematch request"""
+        # Close any existing dialog
+        if self.active_rematch_dialog:
+            try:
+                self.active_rematch_dialog.destroy()
+            except:
+                pass
         
-        response = messagebox.askyesno("Game Over", result_text)
+        # Create custom dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Game Over")
+        dialog.geometry("450x300")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
         
-        if response:
+        # Store reference
+        self.active_rematch_dialog = dialog
+        
+        # Center dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Content frame
+        content = tk.Frame(dialog, bg='white', padx=30, pady=20)
+        content.pack(fill=tk.BOTH, expand=True)
+        
+        # Result text
+        result_label = tk.Label(
+            content,
+            text=result_text,
+            font=("Arial", 12),
+            bg='white',
+            justify=tk.CENTER
+        )
+        result_label.pack(pady=20)
+        
+        # Question
+        question_label = tk.Label(
+            content,
+            text="Do you want to request a rematch?",
+            font=("Arial", 11, "bold"),
+            bg='white'
+        )
+        question_label.pack(pady=10)
+        
+        # Buttons frame
+        btn_frame = tk.Frame(content, bg='white')
+        btn_frame.pack(pady=20)
+        
+        def on_yes():
+            dialog.destroy()
+            self.active_rematch_dialog = None
             # Request rematch
             self.client.request_rematch(self.game_id)
             messagebox.showinfo("Rematch", "Rematch request sent!\nWaiting for opponent's response...")
-        else:
+        
+        def on_no():
+            dialog.destroy()
+            self.active_rematch_dialog = None
             # Return to lobby
             self.hide()
             self.on_game_end(new_elo)
+        
+        # Yes button
+        yes_btn = tk.Button(
+            btn_frame,
+            text="✓ Yes, Rematch!",
+            command=on_yes,
+            bg='#27AE60',
+            fg='white',
+            font=("Arial", 11, "bold"),
+            padx=20,
+            pady=10,
+            relief=tk.FLAT,
+            cursor='hand2'
+        )
+        yes_btn.pack(side=tk.LEFT, padx=10)
+        
+        # No button
+        no_btn = tk.Button(
+            btn_frame,
+            text="✗ No, Return to Lobby",
+            command=on_no,
+            bg='#E74C3C',
+            fg='white',
+            font=("Arial", 11, "bold"),
+            padx=20,
+            pady=10,
+            relief=tk.FLAT,
+            cursor='hand2'
+        )
+        no_btn.pack(side=tk.LEFT, padx=10)
+        
+        # Handle dialog close button (X)
+        dialog.protocol("WM_DELETE_WINDOW", on_no)
     
     def on_rematch_request_received(self, msg):
         """Handle rematch request from opponent"""
@@ -568,20 +666,110 @@ class GameScreen:
         requester_id = payload.get('requester_id')
         game_id = payload.get('game_id')
         
-        # Show confirmation dialog
-        response = messagebox.askyesno(
-            "Rematch Request",
-            f"Your opponent wants a rematch!\n\nDo you accept?"
-        )
+        # IMPORTANT: Close any existing "request rematch" dialog
+        # This ensures opponent's request is shown on top
+        if self.active_rematch_dialog:
+            try:
+                self.active_rematch_dialog.destroy()
+                self.active_rematch_dialog = None
+                print("DEBUG: Closed active rematch dialog to show opponent's request")
+            except:
+                pass
         
-        if response:
+        # Show opponent's rematch request dialog
+        self.show_accept_rematch_dialog(game_id)
+    
+    def show_accept_rematch_dialog(self, game_id):
+        """Show custom dialog to accept/decline opponent's rematch request"""
+        # Create custom dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Rematch Request")
+        dialog.geometry("400x250")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Bring to front
+        dialog.lift()
+        dialog.focus_force()
+        
+        # Center dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Content frame
+        content = tk.Frame(dialog, bg='white', padx=30, pady=20)
+        content.pack(fill=tk.BOTH, expand=True)
+        
+        # Icon
+        icon_label = tk.Label(
+            content,
+            text="⚔️",
+            font=("Arial", 48),
+            bg='white'
+        )
+        icon_label.pack(pady=10)
+        
+        # Message
+        msg_label = tk.Label(
+            content,
+            text="Your opponent wants a rematch!\n\nDo you accept?",
+            font=("Arial", 12, "bold"),
+            bg='white',
+            justify=tk.CENTER
+        )
+        msg_label.pack(pady=15)
+        
+        # Buttons frame
+        btn_frame = tk.Frame(content, bg='white')
+        btn_frame.pack(pady=15)
+        
+        def on_accept():
+            dialog.destroy()
             # Accept rematch
             self.client.accept_rematch(game_id)
             messagebox.showinfo("Rematch", "Rematch accepted!\nStarting new game...")
-        else:
+        
+        def on_decline():
+            dialog.destroy()
             # Decline rematch
             self.client.decline_rematch(game_id)
             messagebox.showinfo("Rematch", "Rematch declined.")
+        
+        # Accept button
+        accept_btn = tk.Button(
+            btn_frame,
+            text="✓ Accept",
+            command=on_accept,
+            bg='#27AE60',
+            fg='white',
+            font=("Arial", 12, "bold"),
+            padx=30,
+            pady=10,
+            relief=tk.FLAT,
+            cursor='hand2'
+        )
+        accept_btn.pack(side=tk.LEFT, padx=10)
+        
+        # Decline button
+        decline_btn = tk.Button(
+            btn_frame,
+            text="✗ Decline",
+            command=on_decline,
+            bg='#E74C3C',
+            fg='white',
+            font=("Arial", 12, "bold"),
+            padx=30,
+            pady=10,
+            relief=tk.FLAT,
+            cursor='hand2'
+        )
+        decline_btn.pack(side=tk.LEFT, padx=10)
+        
+        # Handle dialog close button (X) - treat as decline
+        dialog.protocol("WM_DELETE_WINDOW", on_decline)
     
     def on_rematch_declined(self, msg):
         """Handle when opponent declines rematch"""
@@ -621,13 +809,14 @@ class GameScreen:
             new_color = 'white'
             print(f"WARNING: Rematch but no previous color - defaulting to white")
         
-        # Reset and start new game
+        # Reset and start new game - pass is_rematch=True to avoid re-registering callback
         self.start_game(
             game_id=game_id,
             opponent=self.opponent_name if hasattr(self, 'opponent_name') else "Opponent",
             your_color=new_color,
             opponent_elo=self.opponent_elo if hasattr(self, 'opponent_elo') else 1200,
-            player_elo=self.player_elo if hasattr(self, 'player_elo') else 1200
+            player_elo=self.player_elo if hasattr(self, 'player_elo') else 1200,
+            is_rematch=True
         )
     
     def on_draw_offer_received(self, msg):
@@ -652,10 +841,23 @@ class GameScreen:
     
     def show(self):
         """Show game screen"""
+        # Reload theme mỗi khi show screen (user có thể đã thay đổi settings)
+        if hasattr(self, 'chess_board') and self.chess_board:
+            self.chess_board.load_theme()
+            self.chess_board.draw()
+        
         self.frame.pack(fill='both', expand=True)
     
     def hide(self):
         """Hide game screen"""
+        # Close any active rematch dialog
+        if self.active_rematch_dialog:
+            try:
+                self.active_rematch_dialog.destroy()
+                self.active_rematch_dialog = None
+            except:
+                pass
+        
         self.frame.pack_forget()
         
         # Restore Lobby's MATCH_START callback

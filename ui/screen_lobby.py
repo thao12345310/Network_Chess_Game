@@ -12,13 +12,14 @@ from datetime import datetime
 class LobbyScreen:
     """Màn hình lobby - Tìm đối thủ và xử lý challenge"""
     
-    def __init__(self, root, client, player_elo, on_game_start, on_view_leaderboard, on_logout=None, on_view_game_history=None):
+    def __init__(self, root, client, player_elo, on_game_start, on_view_leaderboard, on_logout=None, on_view_game_history=None, on_settings=None):
         self.root = root
         self.client = client
         self.player_elo = player_elo
         self.on_game_start = on_game_start
         self.on_view_leaderboard = on_view_leaderboard
         self.on_logout = on_logout
+        self.on_settings = on_settings
         self.on_view_game_history = on_view_game_history
         
         self.players_data = []
@@ -110,6 +111,15 @@ class LobbyScreen:
                                          width=20)
         self.leaderboard_btn.pack(pady=10, padx=20, ipady=10)
         
+        # Settings button
+        if self.on_settings:
+            self.settings_btn = tk.Button(left_panel, text="⚙️ Board Settings", 
+                                          command=self.on_settings,
+                                          bg='#9B59B6', fg='white', 
+                                          font=("Arial", 12, "bold"),
+                                          relief='flat', cursor='hand2',
+                                          width=20)
+            self.settings_btn.pack(pady=10, padx=20, ipady=10)
         # Game History button
         if self.on_view_game_history:
             self.history_btn = tk.Button(left_panel, text="📜 Game History", 
