@@ -11,6 +11,8 @@ from screen_login import LoginScreen
 from screen_lobby import LobbyScreen
 from screen_leaderboard import LeaderboardScreen
 from screen_game import GameScreen
+from screen_appearance import AppearanceScreen
+from appearance_settings import AppearanceSettings
 
 
 class ChessApp:
@@ -27,6 +29,9 @@ class ChessApp:
         
         # Network client
         self.client = ChessClient(host=host, port=port)
+        
+        # Appearance settings (shared across screens)
+        self.appearance_settings = AppearanceSettings()
         
         # Current state
         self.current_screen = None
@@ -67,7 +72,8 @@ class ChessApp:
             self.player_elo,
             self.on_game_start,
             self.show_leaderboard,
-            self.on_logout
+            self.on_logout,
+            self.show_appearance_settings
         )
         
         # Leaderboard screen
@@ -81,7 +87,15 @@ class ChessApp:
         self.screens['game'] = GameScreen(
             self.root,
             self.client,
-            self.on_game_end
+            self.on_game_end,
+            self.appearance_settings
+        )
+        
+        # Appearance settings screen
+        self.screens['appearance'] = AppearanceScreen(
+            self.root,
+            self.appearance_settings,
+            self.show_lobby
         )
         
         # Show login screen
@@ -111,6 +125,10 @@ class ChessApp:
     def show_leaderboard(self):
         """Show leaderboard screen"""
         self.show_screen('leaderboard')
+    
+    def show_appearance_settings(self):
+        """Show appearance settings screen"""
+        self.show_screen('appearance')
     
     def on_game_start(self, game_id, opponent, your_color, opponent_elo, time_control="10+0"):
         """Handle game start"""

@@ -1,0 +1,7 @@
+{
+  "board_theme": "wood",
+  "piece_style": "modern",
+  "show_coordinates": true,
+  "show_legal_moves": true,
+  "square_size": 80
+}
