@@ -1,6 +1,6 @@
 {
-  "board_theme": "wood",
-  "piece_style": "modern",
+  "board_theme": "dark",
+  "piece_style": "elegant",
   "show_coordinates": true,
   "show_legal_moves": true,
   "square_size": 80

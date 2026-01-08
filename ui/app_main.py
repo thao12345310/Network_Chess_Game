@@ -77,8 +77,8 @@ class ChessApp:
             self.on_game_start,
             self.show_leaderboard,
             self.on_logout,
+            self.show_game_history,
             self.show_appearance_settings
-            self.show_game_history
         )
         
         # Leaderboard screen
