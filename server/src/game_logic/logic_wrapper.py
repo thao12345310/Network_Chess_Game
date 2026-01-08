@@ -14,7 +14,7 @@ from db_handler import (
     get_player_rating, update_both_players_elo, get_game_details,
     add_to_lobby, remove_from_lobby, get_lobby_players, create_game,
     register_user, verify_user, get_player_id_by_username,
-    get_game_time, update_game_time, get_leaderboard_data
+    get_game_time, update_game_time, get_leaderboard_data, get_player_info_by_id
 )
 import datetime
 import time
@@ -107,6 +107,17 @@ def main():
                  response = {"status": "success", "player_id": pid}
              else:
                  response = {"status": "error", "message": "User not found"}
+
+        elif action == 'get_player_info':
+            pid = req.get('player_id')
+            if not pid:
+                response = {"status": "error", "message": "Missing player_id"}
+            else:
+                info = get_player_info_by_id(pid)
+                if info:
+                    response = {"status": "success", "username": info["username"], "elo": info["elo"]}
+                else:
+                    response = {"status": "error", "message": "Player not found"}
         
         elif action == 'game_result':
             fen = req.get('fen')

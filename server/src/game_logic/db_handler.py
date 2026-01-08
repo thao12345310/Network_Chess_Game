@@ -137,6 +137,23 @@ def get_player_rating(player_id):
     return 1200 # Default if not found, though ideally should exist
 
 
+def get_player_info_by_id(player_id):
+    """
+    Get player information (username and elo) by player_id.
+    Returns dict with username and elo, or None if not found.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT username, elo FROM Player WHERE player_id = ?", (player_id,))
+        result = cur.fetchone()
+        if result:
+            return {"username": result[0], "elo": result[1]}
+        return None
+    finally:
+        conn.close()
+
+
 def update_both_players_elo(player_a_id, new_elo_a, player_b_id, new_elo_b):
     """
     Updates ELO for two players within a single transaction.
