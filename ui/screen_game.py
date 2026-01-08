@@ -204,6 +204,8 @@ class GameScreen:
         self.client.set_callback('EMOJI_UPDATE', self.on_emoji_update)
         self.client.set_callback('GAME_END', self.on_game_end_msg)
         self.client.set_callback('DRAW_OFFER_NOTIFY', self.on_draw_offer_received)
+        self.client.set_callback('REMATCH_REQUEST_NOTIFY', self.on_rematch_request_received)
+        self.client.set_callback('REMATCH_DECLINED_NOTIFY', self.on_rematch_declined)
     
     def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo):
         """Initialize game with data"""
@@ -445,10 +447,51 @@ class GameScreen:
         else:  # loss
             result_text = f"😞 You Lost\n\n{reason}\n\nELO: {self.player_elo} → {new_elo} ({elo_change})"
         
-        messagebox.showinfo("Game Over", result_text)
+        # Ask for rematch
+        result_text += "\n\nDo you want to request a rematch?"
         
+        response = messagebox.askyesno("Game Over", result_text)
+        
+        if response:
+            # Request rematch
+            self.client.request_rematch(self.game_id)
+            messagebox.showinfo("Rematch", "Rematch request sent!\nWaiting for opponent's response...")
+        else:
+            # Return to lobby
+            self.hide()
+            self.on_game_end(new_elo)
+    
+    def on_rematch_request_received(self, msg):
+        """Handle rematch request from opponent"""
+        payload = msg.get('payload', {})
+        requester_id = payload.get('requester_id')
+        game_id = payload.get('game_id')
+        
+        # Show confirmation dialog
+        response = messagebox.askyesno(
+            "Rematch Request",
+            f"Your opponent wants a rematch!\n\nDo you accept?"
+        )
+        
+        if response:
+            # Accept rematch
+            self.client.accept_rematch(game_id)
+            messagebox.showinfo("Rematch", "Rematch accepted!\nStarting new game...")
+        else:
+            # Decline rematch
+            self.client.decline_rematch(game_id)
+            messagebox.showinfo("Rematch", "Rematch declined.")
+    
+    def on_rematch_declined(self, msg):
+        """Handle when opponent declines rematch"""
+        payload = msg.get('payload', {})
+        game_id = payload.get('game_id')
+        
+        messagebox.showinfo("Rematch Declined", "Your opponent declined the rematch request.")
+        
+        # Return to lobby
         self.hide()
-        self.on_game_end(new_elo)
+        self.on_game_end(self.player_elo)
     
     def on_draw_offer_received(self, msg):
         """Handle draw offer from opponent"""

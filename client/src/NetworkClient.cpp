@@ -63,7 +63,7 @@ bool NetworkClient::connectToServer()
     if (inet_pton(AF_INET, serverIP.c_str(), &serverAddr.sin_addr) <= 0)
     {
         std::cerr << "Invalid address: " << serverIP << std::endl;
-        closesocket(sockfd);
+        close(sockfd);
         sockfd = -1;
         return false;
     }
@@ -72,7 +72,7 @@ bool NetworkClient::connectToServer()
     if (connect(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
     {
         std::cerr << "Connection failed: " << strerror(errno) << std::endl;
-        closesocket(sockfd);
+        close(sockfd);
         sockfd = -1;
         return false;
     }
@@ -86,12 +86,9 @@ void NetworkClient::disconnect()
 {
     if (sockfd >= 0)
     {
-        closesocket(sockfd);
+        close(sockfd);
         sockfd = -1;
     }
-#ifdef _WIN32
-    WSACleanup();
-#endif
     connected = false;
     sessionToken.clear();
 }

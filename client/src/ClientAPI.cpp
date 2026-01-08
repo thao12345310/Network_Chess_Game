@@ -285,6 +285,30 @@ extern "C"
         return wrapper->client->declineDraw() ? 1 : 0;
     }
 
+    int client_request_rematch(ClientHandle handle)
+    {
+        if (!handle)
+            return 0;
+        ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
+        return wrapper->client->requestRematch() ? 1 : 0;
+    }
+
+    int client_accept_rematch(ClientHandle handle)
+    {
+        if (!handle)
+            return 0;
+        ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
+        return wrapper->client->acceptRematch() ? 1 : 0;
+    }
+
+    int client_decline_rematch(ClientHandle handle)
+    {
+        if (!handle)
+            return 0;
+        ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
+        return wrapper->client->declineRematch() ? 1 : 0;
+    }
+
     const char *client_get_username(ClientHandle handle)
     {
         if (!handle)

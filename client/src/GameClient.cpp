@@ -205,9 +205,26 @@ bool GameClient::resign()
 
 bool GameClient::requestRematch()
 {
-    // NOTE: This message type is not in server protocol yet
     Json::Value msg;
-    msg["messageType"] = "MATCH_REMATCH_REQ";
+    msg["messageType"] = "REMATCH_REQUEST";
+    msg["payload"]["game_id"] = currentGameId;
+
+    return netClient->sendMessage(msg);
+}
+
+bool GameClient::acceptRematch()
+{
+    Json::Value msg;
+    msg["messageType"] = "REMATCH_ACCEPT";
+    msg["payload"]["game_id"] = currentGameId;
+
+    return netClient->sendMessage(msg);
+}
+
+bool GameClient::declineRematch()
+{
+    Json::Value msg;
+    msg["messageType"] = "REMATCH_DECLINE";
     msg["payload"]["game_id"] = currentGameId;
 
     return netClient->sendMessage(msg);
@@ -279,7 +296,8 @@ void GameClient::processMessage(const Json::Value &msg)
     }
     else if (type == "MOVE_UPDATE" || type == "MOVE_ACK" ||
              type == "MATCH_START" || type == "GAME_END" ||
-             type == "DRAW_OFFER_NOTIFY")
+             type == "DRAW_OFFER_NOTIFY" ||
+             type == "REMATCH_REQUEST_NOTIFY" || type == "REMATCH_DECLINED_NOTIFY")
     {
         if (onGameUpdate)
         {

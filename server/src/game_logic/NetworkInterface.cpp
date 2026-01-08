@@ -819,6 +819,244 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                                          "\"status\": \"declined\"}}";
     }
 
+    // ========== REMATCH FLOW ==========
+
+    // REMATCH_REQUEST - Player requests rematch after game ends
+    else if (type == Protocol::MessageType::REMATCH_REQUEST || action == "REMATCH_REQUEST" || type == "REMATCH_REQUEST")
+    {
+        int game_id = get_json_int(request, "game_id");
+        int my_id = 0;
+        {
+            std::lock_guard<std::mutex> lock(session_mutex);
+            if (client_sessions.find(clientSocket) != client_sessions.end())
+            {
+                my_id = client_sessions[clientSocket];
+            }
+        }
+
+        if (game_id == 0)
+        {
+            return "{\"messageType\": \"ERROR\", \"responseCode\": 400, \"payload\": {\"reason\": \"Missing game_id\"}}";
+        }
+
+        std::cout << "Rematch requested for game " << game_id << " by player " << my_id << std::endl;
+
+        // Get game info to find opponent
+        std::string get_game_req = "{\"action\": \"get_game_info\", \"game_id\": " + std::to_string(game_id) + "}";
+        std::string game_result = execute_logic_command(get_game_req);
+
+        int white_id = get_json_int(game_result, "white_id");
+        int black_id = get_json_int(game_result, "black_id");
+
+        int opponent_id = (my_id == white_id) ? black_id : white_id;
+
+        if (opponent_id == 0)
+        {
+            return "{\"messageType\": \"ERROR\", \"responseCode\": 404, \"payload\": {\"reason\": \"Opponent not found\"}}";
+        }
+
+        std::cout << "Notifying opponent " << opponent_id << " about rematch request" << std::endl;
+
+        // Find opponent socket and notify
+        {
+            std::lock_guard<std::mutex> lock(session_mutex);
+            SOCKET opponentSocket = INVALID_SOCKET;
+            for (auto const &[sock, pid] : client_sessions)
+            {
+                if (pid == opponent_id)
+                {
+                    opponentSocket = sock;
+                    break;
+                }
+            }
+
+            if (opponentSocket != INVALID_SOCKET)
+            {
+                // Send REMATCH_REQUEST_NOTIFY to opponent
+                std::string notify_msg = "{\"messageType\": \"REMATCH_REQUEST_NOTIFY\", \"responseCode\": 200, \"payload\": {"
+                                         "\"game_id\": " +
+                                         std::to_string(game_id) + ", "
+                                                                   "\"requester_id\": " +
+                                         std::to_string(my_id) + "}}";
+                send(opponentSocket, notify_msg.c_str(), static_cast<int>(notify_msg.length()), 0);
+                send(opponentSocket, "\n", 1, 0);
+                std::cout << "Sent REMATCH_REQUEST_NOTIFY to player " << opponent_id << std::endl;
+            }
+        }
+
+        // Return acknowledgment to requester
+        return "{\"messageType\": \"REMATCH_REQUEST_ACK\", \"responseCode\": 200, \"payload\": {"
+               "\"game_id\": " +
+               std::to_string(game_id) + ", "
+                                         "\"status\": \"waiting_for_opponent\"}}";
+    }
+
+    // REMATCH_ACCEPT - Player accepts rematch request
+    else if (type == Protocol::MessageType::REMATCH_ACCEPT || action == "REMATCH_ACCEPT" || type == "REMATCH_ACCEPT")
+    {
+        int old_game_id = get_json_int(request, "game_id");
+        int my_id = 0;
+        {
+            std::lock_guard<std::mutex> lock(session_mutex);
+            if (client_sessions.find(clientSocket) != client_sessions.end())
+            {
+                my_id = client_sessions[clientSocket];
+            }
+        }
+
+        if (old_game_id == 0)
+        {
+            return "{\"messageType\": \"ERROR\", \"responseCode\": 400, \"payload\": {\"reason\": \"Missing game_id\"}}";
+        }
+
+        std::cout << "Rematch accepted for game " << old_game_id << " by player " << my_id << std::endl;
+
+        // Get old game info
+        std::string get_game_req = "{\"action\": \"get_game_info\", \"game_id\": " + std::to_string(old_game_id) + "}";
+        std::string game_result = execute_logic_command(get_game_req);
+
+        int old_white_id = get_json_int(game_result, "white_id");
+        int old_black_id = get_json_int(game_result, "black_id");
+        std::string mode = get_json_string(game_result, "mode");
+
+        if (mode.empty())
+        {
+            mode = "RAPID"; // Default mode
+        }
+
+        // Switch colors for new game
+        int new_white_id = old_black_id;
+        int new_black_id = old_white_id;
+
+        // Create new game with switched colors
+        std::string create_req = "{\"action\": \"create_game\", "
+                                 "\"white_id\": " +
+                                 std::to_string(new_white_id) + ", "
+                                                                "\"black_id\": " +
+                                 std::to_string(new_black_id) + ", "
+                                                                "\"mode\": \"" +
+                                 mode + "\"}";
+        std::string create_result = execute_logic_command(create_req);
+
+        int new_game_id = get_json_int(create_result, "game_id");
+
+        if (new_game_id == 0)
+        {
+            return "{\"messageType\": \"ERROR\", \"responseCode\": 500, \"payload\": {\"reason\": \"Failed to create new game\"}}";
+        }
+
+        std::cout << "Created new game " << new_game_id << " (rematch of " << old_game_id << ")" << std::endl;
+
+        // Notify both players about new game
+        {
+            std::lock_guard<std::mutex> lock(session_mutex);
+
+            // Find both player sockets
+            SOCKET white_socket = INVALID_SOCKET;
+            SOCKET black_socket = INVALID_SOCKET;
+
+            for (auto const &[sock, pid] : client_sessions)
+            {
+                if (pid == new_white_id)
+                    white_socket = sock;
+                if (pid == new_black_id)
+                    black_socket = sock;
+            }
+
+            std::string notify_msg = "{\"messageType\": \"MATCH_START\", \"responseCode\": 200, \"payload\": {"
+                                     "\"game_id\": " +
+                                     std::to_string(new_game_id) + ", "
+                                                                   "\"white_id\": " +
+                                     std::to_string(new_white_id) + ", "
+                                                                    "\"black_id\": " +
+                                     std::to_string(new_black_id) + ", "
+                                                                    "\"mode\": \"" +
+                                     mode + "\", "
+                                            "\"is_rematch\": true, "
+                                            "\"old_game_id\": " +
+                                     std::to_string(old_game_id) + "}}";
+
+            if (white_socket != INVALID_SOCKET)
+            {
+                send(white_socket, notify_msg.c_str(), static_cast<int>(notify_msg.length()), 0);
+                send(white_socket, "\n", 1, 0);
+                std::cout << "Sent MATCH_START (rematch) to white player " << new_white_id << std::endl;
+            }
+
+            if (black_socket != INVALID_SOCKET)
+            {
+                send(black_socket, notify_msg.c_str(), static_cast<int>(notify_msg.length()), 0);
+                send(black_socket, "\n", 1, 0);
+                std::cout << "Sent MATCH_START (rematch) to black player " << new_black_id << std::endl;
+            }
+        }
+
+        return "{\"messageType\": \"REMATCH_ACCEPT_ACK\", \"responseCode\": 200, \"payload\": {"
+               "\"new_game_id\": " +
+               std::to_string(new_game_id) + ", "
+                                             "\"old_game_id\": " +
+               std::to_string(old_game_id) + "}}";
+    }
+
+    // REMATCH_DECLINE - Player declines rematch request
+    else if (type == Protocol::MessageType::REMATCH_DECLINE || action == "REMATCH_DECLINE" || type == "REMATCH_DECLINE")
+    {
+        int game_id = get_json_int(request, "game_id");
+        int my_id = 0;
+        {
+            std::lock_guard<std::mutex> lock(session_mutex);
+            if (client_sessions.find(clientSocket) != client_sessions.end())
+            {
+                my_id = client_sessions[clientSocket];
+            }
+        }
+
+        if (game_id == 0)
+        {
+            return "{\"messageType\": \"ERROR\", \"responseCode\": 400, \"payload\": {\"reason\": \"Missing game_id\"}}";
+        }
+
+        std::cout << "Rematch declined for game " << game_id << " by player " << my_id << std::endl;
+
+        // Get game info to find requester (opponent)
+        std::string get_game_req = "{\"action\": \"get_game_info\", \"game_id\": " + std::to_string(game_id) + "}";
+        std::string game_result = execute_logic_command(get_game_req);
+
+        int white_id = get_json_int(game_result, "white_id");
+        int black_id = get_json_int(game_result, "black_id");
+
+        int requester_id = (my_id == white_id) ? black_id : white_id;
+
+        // Notify requester that rematch was declined
+        {
+            std::lock_guard<std::mutex> lock(session_mutex);
+            SOCKET requesterSocket = INVALID_SOCKET;
+            for (auto const &[sock, pid] : client_sessions)
+            {
+                if (pid == requester_id)
+                {
+                    requesterSocket = sock;
+                    break;
+                }
+            }
+
+            if (requesterSocket != INVALID_SOCKET)
+            {
+                std::string notify_msg = "{\"messageType\": \"REMATCH_DECLINED_NOTIFY\", \"responseCode\": 200, \"payload\": {"
+                                         "\"game_id\": " +
+                                         std::to_string(game_id) + "}}";
+                send(requesterSocket, notify_msg.c_str(), static_cast<int>(notify_msg.length()), 0);
+                send(requesterSocket, "\n", 1, 0);
+                std::cout << "Sent REMATCH_DECLINED_NOTIFY to player " << requester_id << std::endl;
+            }
+        }
+
+        return "{\"messageType\": \"REMATCH_DECLINE_ACK\", \"responseCode\": 200, \"payload\": {"
+               "\"game_id\": " +
+               std::to_string(game_id) + ", "
+                                         "\"status\": \"declined\"}}";
+    }
+
     // Forward logic to Python (AUTH, LOBBY, etc.)
     std::string result = execute_logic_command(request);
 

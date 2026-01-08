@@ -50,6 +50,14 @@ namespace Protocol {
         constexpr const char* DRAW_ACCEPT = "DRAW_ACCEPT";
         constexpr const char* DRAW_DECLINE = "DRAW_DECLINE";
         
+        // Rematch
+        constexpr const char* REMATCH_REQUEST = "REMATCH_REQUEST";
+        constexpr const char* REMATCH_REQUEST_ACK = "REMATCH_REQUEST_ACK";
+        constexpr const char* REMATCH_REQUEST_NOTIFY = "REMATCH_REQUEST_NOTIFY";
+        constexpr const char* REMATCH_ACCEPT = "REMATCH_ACCEPT";
+        constexpr const char* REMATCH_DECLINE = "REMATCH_DECLINE";
+        constexpr const char* REMATCH_DECLINED_NOTIFY = "REMATCH_DECLINED_NOTIFY";
+        
         // Errors
         constexpr const char* ERROR = "ERROR";
 

@@ -106,6 +106,16 @@ class ChessClient:
         lib.client_accept_challenge.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
         lib.client_accept_challenge.restype = ctypes.c_int
         
+        # Rematch functions
+        lib.client_request_rematch.argtypes = [ctypes.c_void_p]
+        lib.client_request_rematch.restype = ctypes.c_int
+        
+        lib.client_accept_rematch.argtypes = [ctypes.c_void_p]
+        lib.client_accept_rematch.restype = ctypes.c_int
+        
+        lib.client_decline_rematch.argtypes = [ctypes.c_void_p]
+        lib.client_decline_rematch.restype = ctypes.c_int
+        
     def connect(self):
         """Connect to server"""
         try:
@@ -309,6 +319,24 @@ class ChessClient:
         if not self.handle:
             return False
         return self.lib.client_decline_draw(self.handle) == 1
+    
+    def request_rematch(self, game_id):
+        """Request rematch after game ends"""
+        if not self.handle:
+            return False
+        return self.lib.client_request_rematch(self.handle) == 1
+    
+    def accept_rematch(self, game_id):
+        """Accept rematch request"""
+        if not self.handle:
+            return False
+        return self.lib.client_accept_rematch(self.handle) == 1
+    
+    def decline_rematch(self, game_id):
+        """Decline rematch request"""
+        if not self.handle:
+            return False
+        return self.lib.client_decline_rematch(self.handle) == 1
     
     # Challenge methods
     def send_challenge(self, opponent):

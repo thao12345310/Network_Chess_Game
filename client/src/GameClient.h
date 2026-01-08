@@ -60,6 +60,8 @@ public:
     bool declineDraw();
     bool resign();
     bool requestRematch();
+    bool acceptRematch();
+    bool declineRematch();
     
     // Match history
     bool requestMatchHistory();

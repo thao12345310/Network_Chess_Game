@@ -49,6 +49,9 @@ int client_resign(ClientHandle handle);
 int client_offer_draw(ClientHandle handle);
 int client_accept_draw(ClientHandle handle);
 int client_decline_draw(ClientHandle handle);
+int client_request_rematch(ClientHandle handle);
+int client_accept_rematch(ClientHandle handle);
+int client_decline_rematch(ClientHandle handle);
 
 // State accessors
 const char* client_get_username(ClientHandle handle);
