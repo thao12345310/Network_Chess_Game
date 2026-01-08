@@ -401,6 +401,7 @@ def get_lobby_players():
             JOIN Player p ON l.player_id = p.player_id
             ORDER BY l.joined_at ASC
         """)
+        rows = cur.fetchall()
         return [
             {
                 "player_id": r[0], 
@@ -408,6 +409,7 @@ def get_lobby_players():
                 "elo": r[2], 
                 "joined_at": r[3]
             } 
+            for r in rows
         ]
     finally:
         conn.close()

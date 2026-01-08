@@ -290,6 +290,7 @@ def main():
 
         elif action == 'get_ready_players' or action == 'GET_PLAYER_LIST':
             players = get_lobby_players()
+            print(f"DEBUG: get_lobby_players() returned: {players}", file=sys.stderr)
             response = {"type": "PLAYER_LIST", "status": "success", "players": players}
 
         # ========== Client Protocol: MOVE Handler ==========

@@ -204,8 +204,12 @@ class LobbyScreen:
     def refresh_players(self):
         """Refresh player list"""
         if self.client.connected:
-            self.client.get_player_list()
+            print("DEBUG: Requesting player list...")
+            result = self.client.get_player_list()
+            print(f"DEBUG: get_player_list() returned: {result}")
             self.log("Refreshing players list...")
+        else:
+            print("DEBUG: Client not connected!")
     
     def filter_players(self, event=None):
         """Filter players by search"""
@@ -273,8 +277,10 @@ class LobbyScreen:
     
     def on_player_list(self, msg):
         """Handle player list update"""
+        print(f"DEBUG: on_player_list received: {msg}")
         payload = msg.get('payload', {})
         players = payload.get('players', [])
+        print(f"DEBUG: Players data: {players}")
         
         # Convert to list of dicts if it's just names
         if players and isinstance(players[0], str):
