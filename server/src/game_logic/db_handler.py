@@ -450,3 +450,64 @@ def get_leaderboard_data(limit=100):
         ]
     finally:
         conn.close()
+
+
+def get_player_game_history(player_id):
+    """
+    Get all finished games for a specific player.
+    Returns list of game summaries ordered by most recent first.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT 
+                g.game_id, 
+                g.mode, 
+                g.start_time, 
+                g.end_time,
+                g.status,
+                g.winner_id,
+                g.white_id,
+                g.black_id,
+                p1.username as white_username,
+                p2.username as black_username
+            FROM Game g
+            JOIN Player p1 ON g.white_id = p1.player_id
+            JOIN Player p2 ON g.black_id = p2.player_id
+            WHERE (g.white_id = ? OR g.black_id = ?)
+                AND g.status = 'FINISHED'
+            ORDER BY g.end_time DESC
+        """, (player_id, player_id))
+        
+        games = []
+        for row in cur.fetchall():
+            game_id, mode, start_time, end_time, status, winner_id, white_id, black_id, white_username, black_username = row
+            
+            # Determine result from player's perspective
+            if winner_id is None:
+                result = "DRAW"
+            elif winner_id == player_id:
+                result = "WIN"
+            else:
+                result = "LOSS"
+            
+            # Determine player's color
+            player_color = "WHITE" if white_id == player_id else "BLACK"
+            opponent_username = black_username if player_color == "WHITE" else white_username
+            
+            games.append({
+                "game_id": game_id,
+                "mode": mode,
+                "start_time": start_time,
+                "end_time": end_time,
+                "result": result,
+                "player_color": player_color,
+                "opponent_username": opponent_username,
+                "white_username": white_username,
+                "black_username": black_username
+            })
+        
+        return games
+    finally:
+        conn.close()

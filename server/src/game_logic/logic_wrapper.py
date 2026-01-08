@@ -14,7 +14,8 @@ from db_handler import (
     get_player_rating, update_both_players_elo, get_game_details,
     add_to_lobby, remove_from_lobby, get_lobby_players, create_game,
     register_user, verify_user, get_player_id_by_username,
-    get_game_time, update_game_time, get_leaderboard_data, get_player_info_by_id
+    get_game_time, update_game_time, get_leaderboard_data, get_player_info_by_id,
+    get_player_game_history
 )
 import datetime
 import time
@@ -689,6 +690,34 @@ def main():
         elif action == 'get_leaderboard':
             leaderboard = get_leaderboard_data()
             response = {"status": "success", "leaderboard": leaderboard}
+
+        elif action == 'get_game_history':
+            # Get player's game history
+            player_id = req.get('player_id')
+            if not player_id:
+                response = {"status": "error", "message": "Missing player_id"}
+            else:
+                try:
+                    games = get_player_game_history(player_id)
+                    response = {"status": "success", "games": games}
+                except Exception as e:
+                    response = {"status": "error", "message": f"Error getting game history: {str(e)}"}
+
+        elif action == 'get_game_replay':
+            # Get detailed game info for replay
+            game_id = req.get('game_id')
+            if not game_id:
+                response = {"status": "error", "message": "Missing game_id"}
+            else:
+                try:
+                    game_details = get_game_details(game_id)
+                    if game_details:
+                        response = {"status": "success", "game": game_details}
+                    else:
+                        response = {"status": "error", "message": "Game not found"}
+                except Exception as e:
+                    response = {"status": "error", "message": f"Error getting game replay: {str(e)}"}
+
 
         else:
             response = {"status": "error", "message": f"Unknown action: {action}"}
