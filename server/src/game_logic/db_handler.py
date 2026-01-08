@@ -3,6 +3,7 @@ import hashlib # Added for future use, though currently using plaintext as per s
 from database import get_connection
 from init_db import INITIAL_FEN
 import datetime
+import time
 
 def register_user(username, password):
     conn = get_connection()
@@ -87,12 +88,13 @@ def create_game(white_id, black_id, mode='RAPID', time_limit=None):
     conn = get_connection()
     cur = conn.cursor()
     start_time = datetime.datetime.utcnow().isoformat()
+    now_ts = str(time.time())
     cur.execute(
         """
-        INSERT INTO Game (white_id, black_id, mode, white_time, black_time, status, start_time, current_fen)
-        VALUES (?, ?, ?, ?, ?, 'ONGOING', ?, ?)
+        INSERT INTO Game (white_id, black_id, mode, white_time, black_time, last_move_time, status, start_time, current_fen)
+        VALUES (?, ?, ?, ?, ?, ?, 'ONGOING', ?, ?)
         """,
-        (white_id, black_id, mode, time_limit, time_limit, start_time, INITIAL_FEN)
+        (white_id, black_id, mode, time_limit, time_limit, now_ts, start_time, INITIAL_FEN)
     )
     game_id = cur.lastrowid
     conn.commit()

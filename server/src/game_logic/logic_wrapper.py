@@ -241,6 +241,7 @@ def main():
 
             response = {"status": "success"}
         
+            response = {"status": "success"}
 
         elif action == 'create_game':
             white_id = req.get('white_id')
@@ -401,11 +402,11 @@ def main():
                         "messageType": "MOVE_ACK",
                         "status": "success",
                         "success": True,
-                        "is_valid": False, 
+                        "is_valid": False,
                         "message": "Timeout",
                         "game_result": "timeout",
                         "winner_id": timeout_winner,
-                         "white_time": white_time,
+                        "white_time": white_time,
                         "black_time": black_time,
                          "opponent_id": white_id if timeout_winner == black_id else black_id # Approximate
                     }

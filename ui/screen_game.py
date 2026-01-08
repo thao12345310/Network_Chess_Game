@@ -442,7 +442,9 @@ class GameScreen:
                 self.chess_board.draw()
                 
                 # Update Times
-                self.update_times(payload)
+                # MOVE_ACK has times in root msg, MOVE_UPDATE in payload
+                time_data = msg if 'white_time' in msg else payload
+                self.update_times(time_data)
                 
                 # Add to history
                 from_pos = payload.get('from') or msg.get('from')
@@ -595,6 +597,8 @@ class GameScreen:
     def hide(self):
         """Hide game screen"""
         self.frame.pack_forget()
+
+# ============== TEST MODE ==============
 
 
 # ============== TEST MODE ==============
