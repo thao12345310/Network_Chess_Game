@@ -232,9 +232,10 @@ class LoginScreen:
             # Success
             self.client.username = self.username_entry.get()
             elo = payload.get('elo', 1200) if isinstance(payload, dict) else 1200
+            player_id = payload.get('user_id') if isinstance(payload, dict) else None
             
             messagebox.showinfo("Success", f"Welcome {self.client.username}!\nELO: {elo}")
-            self.on_login_success(elo)
+            self.on_login_success(elo, player_id)
         else:
             # Error
             reason = payload.get('reason', 'Login failed') if isinstance(payload, dict) else 'Login failed'

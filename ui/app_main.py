@@ -13,6 +13,9 @@ from screen_leaderboard import LeaderboardScreen
 from screen_game import GameScreen
 from screen_appearance import AppearanceScreen
 from appearance_settings import AppearanceSettings
+from screen_game_history import GameHistoryScreen
+from screen_game_replay import GameReplayScreen
+
 
 
 class ChessApp:
@@ -36,6 +39,7 @@ class ChessApp:
         # Current state
         self.current_screen = None
         self.player_elo = 1200
+        self.player_id = None  # Store player ID for game history
         
         # Initialize screens
         self.screens = {}
@@ -74,6 +78,7 @@ class ChessApp:
             self.show_leaderboard,
             self.on_logout,
             self.show_appearance_settings
+            self.show_game_history
         )
         
         # Leaderboard screen
@@ -98,6 +103,15 @@ class ChessApp:
             self.show_lobby
         )
         
+        # Game History screen (will be initialized after login)
+        self.screens['game_history'] = None
+        
+        # Game Replay screen
+        self.screens['game_replay'] = GameReplayScreen(
+            self.root,
+            self.show_game_history
+        )
+        
         # Show login screen
         self.show_screen('login')
     
@@ -112,10 +126,21 @@ class ChessApp:
             self.current_screen = self.screens[screen_name]
             self.current_screen.show()
     
-    def on_login_success(self, elo):
+    def on_login_success(self, elo, player_id=None):
         """Handle successful login"""
         self.player_elo = elo
+        self.player_id = player_id
         self.screens['lobby'].player_elo = elo
+        
+        # Initialize game history screen now that we have player_id
+        if player_id and not self.screens['game_history']:
+            self.screens['game_history'] = GameHistoryScreen(
+                self.root,
+                player_id,
+                self.show_game_replay,
+                self.show_lobby
+            )
+        
         self.show_screen('lobby')
     
     def show_lobby(self):
@@ -129,6 +154,17 @@ class ChessApp:
     def show_appearance_settings(self):
         """Show appearance settings screen"""
         self.show_screen('appearance')
+    def show_game_history(self):
+        """Show game history screen"""
+        if self.screens['game_history']:
+            self.show_screen('game_history')
+        else:
+            print("Game history not initialized - player_id missing")
+    
+    def show_game_replay(self, game_id, game_info):
+        """Show game replay screen"""
+        self.screens['game_replay'].load_game(game_id, game_info)
+        self.show_screen('game_replay')
     
     def on_game_start(self, game_id, opponent, your_color, opponent_elo, time_control="10+0"):
         """Handle game start"""
@@ -152,6 +188,7 @@ class ChessApp:
         """Handle logout - return to login screen"""
         # Reset client state
         self.player_elo = 1200
+        self.player_id = None
         # Show login screen
         self.show_screen('login')
     
