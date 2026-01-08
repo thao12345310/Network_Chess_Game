@@ -222,9 +222,9 @@ class GameScreen:
         # NOTE: DO NOT register MATCH_START here - it will override Lobby's callback
         # MATCH_START for rematch is registered dynamically when needed
     
-    def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo):
+    def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo, time_control="10+0"):
         """Initialize game with data"""
-        print(f"DEBUG: start_game called. Game: {game_id}, Me: {self.client.username}, Color: '{your_color}'")
+        print(f"DEBUG: start_game called. Game: {game_id}, Me: {self.client.username}, Color: '{your_color}', TC: {time_control}")
         self.game_id = game_id
         self.opponent_name = opponent
         self.player_color = your_color
@@ -246,6 +246,16 @@ class GameScreen:
         
         self.opponent_name_label.config(text=f"👤 {opponent}")
         self.opponent_elo_label.config(text=f"⭐ ELO: {opponent_elo}")
+        
+        # Parse time control (format "10+0" -> 10 mins)
+        try:
+            minutes = int(time_control.split('+')[0])
+            time_str = f"{minutes:02d}:00"
+        except:
+            time_str = "10:00"
+            
+        self.player_time_label.config(text=time_str)
+        self.opponent_time_label.config(text=time_str)
         
         color_emoji = "⚪ White" if your_color == 'white' else "⚫ Black"
         self.color_label.config(text=color_emoji)

@@ -42,15 +42,6 @@ class LobbyScreen:
         # Player info
         info_frame = tk.Frame(top_bar, bg='#2C3E50')
         info_frame.pack(side='right', padx=20)
-        
-        tk.Label(info_frame, text=f"👤 {self.client.username}", 
-                font=("Arial", 12), 
-                fg='#ECF0F1', bg='#2C3E50').pack(side='left', padx=10)
-        
-        tk.Label(info_frame, text=f"⭐ ELO: {self.player_elo}", 
-                font=("Arial", 12, "bold"), 
-                fg='#F39C12', bg='#2C3E50').pack(side='left', padx=10)
-        
         self.logout_btn = tk.Button(info_frame, text="Logout", 
                                     command=self.do_logout,
                                     bg='#E74C3C', fg='white', 
@@ -125,27 +116,6 @@ class LobbyScreen:
                                      relief='flat', cursor='hand2',
                                      width=20)
         self.refresh_btn.pack(pady=10, padx=20, ipady=10)
-        
-        ttk.Separator(left_panel, orient='horizontal').pack(fill='x', 
-                                                            pady=20, padx=20)
-        
-        # Stats
-        stats_frame = tk.Frame(left_panel, bg='white')
-        stats_frame.pack(pady=10, padx=20)
-        
-        tk.Label(stats_frame, text="Your Stats", 
-                font=("Arial", 11, "bold"), 
-                fg='#2C3E50', bg='white').pack()
-        
-        self.stats_text = tk.Text(stats_frame, width=22, height=5, 
-                                 font=("Arial", 9),
-                                 relief='flat', bg='#ECF0F1')
-        self.stats_text.pack(pady=10)
-        self.stats_text.insert('end', f"Username: {self.client.username}\n")
-        self.stats_text.insert('end', f"ELO: {self.player_elo}\n")
-        self.stats_text.insert('end', f"Wins: 0\n")
-        self.stats_text.insert('end', f"Losses: 0\n")
-        self.stats_text.config(state='disabled')
         
         # Center panel - Players list
         center_panel = tk.Frame(content, bg='white', relief='solid', bd=1)
@@ -271,8 +241,8 @@ class LobbyScreen:
         opponent = selected_text.split()[0].strip()
         mode = self.game_mode.get()
         
-        # TODO: Pass mode to challenge request
-        self.client.send_challenge(opponent)
+        # Pass mode to challenge request
+        self.client.send_challenge(opponent, mode)
         self.log(f"Challenge sent to {opponent} (Mode: {mode})")
         
         mode_names = {"BLITZ": "5 min", "RAPID": "10 min", "CLASSICAL": "30 min"}
@@ -284,8 +254,8 @@ class LobbyScreen:
     def do_random_match(self):
         """Find random opponent"""
         mode = self.game_mode.get()
-        # TODO: Pass mode to matchmaking request
-        self.client.random_match()
+        # Pass mode to matchmaking request
+        self.client.random_match(mode)
         self.log(f"Searching for random opponent (Mode: {mode})...")
         
         mode_names = {"BLITZ": "5 min", "RAPID": "10 min", "CLASSICAL": "30 min"}
@@ -329,6 +299,7 @@ class LobbyScreen:
         opponent_id = payload.get('opponent_id')
         your_color = payload.get('your_color', 'white')
         opponent_elo = payload.get('opponent_elo', 1200)
+        time_control = payload.get('time_control', '10+0')
         
         # Look up opponent username from players_data
         opponent = f"Player {opponent_id}"
@@ -339,9 +310,9 @@ class LobbyScreen:
                 break
         
         self.log(f"Game starting vs {opponent}!")
-        print(f"DEBUG: Starting game - ID: {game_id}, opponent: {opponent}, color: {your_color}")
+        print(f"DEBUG: Starting game - ID: {game_id}, opponent: {opponent}, color: {your_color}, TC: {time_control}")
         self.hide()
-        self.on_game_start(game_id, opponent, your_color, opponent_elo)
+        self.on_game_start(game_id, opponent, your_color, opponent_elo, time_control)
     
     def on_challenge_received(self, msg):
         """Handle incoming challenge from another player"""
@@ -357,17 +328,19 @@ class LobbyScreen:
         
         self.log(f"Challenge received from {challenger_name}!")
         
+        mode = payload.get('mode', 'RAPID')
+        
         # Show accept/decline dialog
         result = messagebox.askyesno(
             "Challenge Received!",
-            f"⚔️ {challenger_name} wants to play chess with you!\n\nDo you accept the challenge?",
+            f"⚔️ {challenger_name} wants to play chess with you!\nMode: {mode}\n\nDo you accept the challenge?",
             icon='question'
         )
         
         if result:
             # Accept challenge
-            self.client.accept_challenge(str(challenger_id))
-            self.log(f"Accepted challenge from {challenger_name}")
+            self.client.accept_challenge(str(challenger_id), mode)
+            self.log(f"Accepted challenge from {challenger_name} ({mode})")
         else:
             # Decline - just don't respond (or send decline)
             self.log(f"Declined challenge from {challenger_name}")

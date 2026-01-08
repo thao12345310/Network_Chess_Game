@@ -276,10 +276,14 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         if (targetSocket != INVALID_SOCKET)
         {
             // Send CHALLENGE_NOTIFY to target player with proper format
+            std::string mode = get_json_string(request, "mode");
+            if (mode.empty()) mode = "RAPID";
+
             std::string msg = "{\"messageType\": \"CHALLENGE_NOTIFY\", \"responseCode\": 200, \"payload\": {"
                               "\"from_id\": " +
                               std::to_string(sender_id) + ", "
-                                                          "\"challenger_id\": " +
+                              "\"mode\": \"" + mode + "\", "
+                              "\"challenger_id\": " +
                               std::to_string(sender_id) + "}}";
             send(targetSocket, msg.c_str(), static_cast<int>(msg.length()), 0);
             send(targetSocket, "\n", 1, 0);
@@ -330,8 +334,13 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
             matchmaking_queue.erase(matchmaking_queue.begin(), matchmaking_queue.begin() + 2);
 
             // Create game via Python
+            std::string mode = get_json_string(request, "mode"); 
+            // In random match, request has mode. But we have p1 and p2. 
+            // Ideally we check compatibility. For now use Current Request's mode (which is player 2 aka my_id)
+            if (mode.empty()) mode = "RAPID";
+
             std::string create_req = "{\"action\": \"create_game\", \"white_id\": " + std::to_string(player1_id) +
-                                     ", \"black_id\": " + std::to_string(player2_id) + ", \"mode\": \"RAPID\"}";
+                                     ", \"black_id\": " + std::to_string(player2_id) + ", \"mode\": \"" + mode + "\"}";
             std::string create_res = execute_logic_command(create_req);
             int game_id = get_json_int(create_res, "game_id");
 
@@ -353,6 +362,11 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                     socket2 = sock;
             }
 
+            // Determine time control string
+            std::string time_control = "10+0";
+            if (mode == "BLITZ") time_control = "5+0";
+            else if (mode == "CLASSICAL") time_control = "30+0";
+
             // Send MATCH_START to player1 (white)
             if (socket1 != INVALID_SOCKET)
             {
@@ -362,7 +376,7 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                                                              "\"opponent_id\": " +
                                    std::to_string(player2_id) + ", "
                                                                 "\"your_color\": \"white\", "
-                                                                "\"time_control\": \"10+0\"}}";
+                                                                "\"time_control\": \"" + time_control + "\"}}";
                 send(socket1, msg1.c_str(), static_cast<int>(msg1.length()), 0);
                 send(socket1, "\n", 1, 0);
             }
@@ -376,7 +390,7 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                                                              "\"opponent_id\": " +
                                    std::to_string(player1_id) + ", "
                                                                 "\"your_color\": \"black\", "
-                                                                "\"time_control\": \"10+0\"}}";
+                                                                "\"time_control\": \"" + time_control + "\"}}";
                 send(socket2, msg2.c_str(), static_cast<int>(msg2.length()), 0);
                 send(socket2, "\n", 1, 0);
             }
@@ -391,7 +405,7 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                    std::to_string(my_id == player1_id ? player2_id : player1_id) + ", "
                                                                                    "\"your_color\": \"" +
                    std::string(my_id == player1_id ? "white" : "black") + "\", "
-                                                                          "\"time_control\": \"10+0\"}}";
+                                                                          "\"time_control\": \"" + time_control + "\"}}";
         }
 
         // Still waiting for opponent
@@ -425,6 +439,38 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         // Fallback - return empty list
         std::cout << "LOBBY_LIST returning empty list (fallback)" << std::endl;
         return "{\"messageType\": \"LOBBY_LIST\", \"responseCode\": 200, \"payload\": {\"players\": []}}";
+    }
+
+    // LEADERBOARD_REQ - Get top players by ELO
+    else if (type == "LEADERBOARD_REQ" || action == "LEADERBOARD_REQ")
+    {
+        std::string list_res = execute_logic_command("{\"action\": \"get_leaderboard\"}");
+        
+        // Extract leaderboard array
+        size_t lb_start = list_res.find("\"leaderboard\":");
+        if (lb_start != std::string::npos)
+        {
+            size_t arr_start = list_res.find("[", lb_start);
+            // Need to find matching closing bracket, simplified assuming no nested brackets in username
+            // Actually users might use nested brackets? No, valid JSON structure for list of objects.
+            // But simply finding ']' might be premature if username contains ']'.
+            // However logic_wrapper produces standard JSON.
+            // Let's rely on logic_wrapper output format which is usually compact or standard.
+            // Better: find the LAST ']' corresponding to the first '['.
+            // Since it's a flat list of dicts, it shouldn't be too nested, but just finding ANY ']' might stop early.
+            // But LOBBY_LIST uses find("]", arr_start), so I'll trust that for now or improve it.
+            // Actually, `execute_logic_command` returns the full JSON object string.
+            // The JSON from python is {"status": "success", "leaderboard": [...]}
+            // So finding "]" at the end should work.
+            size_t arr_end = list_res.find_last_of("]"); 
+            
+            if (arr_start != std::string::npos && arr_end != std::string::npos && arr_end > arr_start)
+            {
+                 std::string lb_arr = list_res.substr(arr_start, arr_end - arr_start + 1);
+                 return "{\"messageType\": \"LEADERBOARD\", \"responseCode\": 200, \"payload\": {\"leaderboard\": " + lb_arr + "}}";
+            }
+        }
+        return "{\"messageType\": \"LEADERBOARD\", \"responseCode\": 200, \"payload\": {\"leaderboard\": []}}";
     }
 
     // Accept/Decline Challenge - Handle both old format and new CHALLENGE_RESP format
@@ -498,7 +544,10 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         }
 
         // Accept challenge - Create Game
-        std::string create_req = "{\"action\": \"create_game\", \"white_id\": " + std::to_string(challenger_id) + ", \"black_id\": " + std::to_string(my_id) + ", \"mode\": \"RAPID\"}";
+        std::string mode = get_json_string(request, "mode");
+        if (mode.empty()) mode = "RAPID";
+
+        std::string create_req = "{\"action\": \"create_game\", \"white_id\": " + std::to_string(challenger_id) + ", \"black_id\": " + std::to_string(my_id) + ", \"mode\": \"" + mode + "\"}";
         std::cout << "DEBUG: Creating game with: " << create_req << std::endl;
         std::string create_res = execute_logic_command(create_req);
         std::cout << "DEBUG: Python response: " << create_res << std::endl;
@@ -510,6 +559,11 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
             std::cout << "ERROR: Game creation failed!" << std::endl;
             return "{\"messageType\": \"ERROR\", \"responseCode\": 500, \"payload\": {\"reason\": \"Failed to create game\"}}";
         }
+
+        // Determine time control string
+        std::string time_control = "10+0";
+        if (mode == "BLITZ") time_control = "5+0";
+        else if (mode == "CLASSICAL") time_control = "30+0";
 
         // Notify Challenger with MATCH_START
         std::lock_guard<std::mutex> lock(session_mutex);
@@ -531,7 +585,7 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                                                         "\"opponent_id\": " +
                               std::to_string(my_id) + ", "
                                                       "\"your_color\": \"white\", "
-                                                      "\"time_control\": \"10+0\"}}";
+                                                      "\"time_control\": \"" + time_control + "\"}}";
             send(challengerSocket, msg.c_str(), static_cast<int>(msg.length()), 0);
             send(challengerSocket, "\n", 1, 0);
         }
@@ -545,7 +599,7 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                                          "\"opponent_id\": " +
                std::to_string(challenger_id) + ", "
                                                "\"your_color\": \"black\", "
-                                               "\"time_control\": \"10+0\"}}";
+                                               "\"time_control\": \"" + time_control + "\"}}";
     }
 
     // Decline Challenge

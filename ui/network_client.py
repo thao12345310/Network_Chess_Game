@@ -100,11 +100,15 @@ class ChessClient:
         lib.client_decline_draw.restype = ctypes.c_int
         
         # Challenge functions
-        lib.client_send_challenge.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.client_send_challenge.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
         lib.client_send_challenge.restype = ctypes.c_int
         
-        lib.client_accept_challenge.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.client_accept_challenge.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
         lib.client_accept_challenge.restype = ctypes.c_int
+
+        # Lobby functions
+        lib.client_join_lobby.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.client_join_lobby.restype = ctypes.c_int
         
         # Rematch functions
         lib.client_request_rematch.argtypes = [ctypes.c_void_p]
@@ -115,6 +119,9 @@ class ChessClient:
         
         lib.client_decline_rematch.argtypes = [ctypes.c_void_p]
         lib.client_decline_rematch.restype = ctypes.c_int
+
+        lib.client_request_leaderboard.argtypes = [ctypes.c_void_p]
+        lib.client_request_leaderboard.restype = ctypes.c_int
         
     def connect(self):
         """Connect to server"""
@@ -209,8 +216,12 @@ class ChessClient:
         """Handle player list from C++"""
         try:
             msg = json.loads(json_msg.decode('utf-8'))
-            if 'LOBBY_LIST' in self.callbacks:
+            msg_type = msg.get('messageType', '')
+            
+            if msg_type == 'LOBBY_LIST' and 'LOBBY_LIST' in self.callbacks:
                 self.callbacks['LOBBY_LIST'](msg)
+            elif msg_type == 'LEADERBOARD' and 'LEADERBOARD' in self.callbacks:
+                self.callbacks['LEADERBOARD'](msg.get('payload', {}))
         except Exception as e:
             print(f"Player list callback error: {e}")
     
@@ -282,13 +293,12 @@ class ChessClient:
         )
         return result == 1
     
-    def random_match(self):
+    def random_match(self, mode="RAPID"):
         """Find random match"""
-        # TODO: Implement in C++ client
         if not self.handle:
             return False
-        # For now, call join_lobby
-        result = self.lib.client_join_lobby(self.handle)
+        # Call with mode
+        result = self.lib.client_join_lobby(self.handle, mode.encode('utf-8'))
         return result == 1
     
     def logout(self):
@@ -339,23 +349,25 @@ class ChessClient:
         return self.lib.client_decline_rematch(self.handle) == 1
     
     # Challenge methods
-    def send_challenge(self, opponent):
+    def send_challenge(self, opponent, mode="RAPID"):
         """Send challenge to specific player"""
         if not self.handle:
             return False
         result = self.lib.client_send_challenge(
             self.handle,
-            opponent.encode('utf-8')
+            opponent.encode('utf-8'),
+            mode.encode('utf-8')
         )
         return result == 1
     
-    def accept_challenge(self, challenger_id):
+    def accept_challenge(self, challenger_id, mode="RAPID"):
         """Accept challenge from a player"""
         if not self.handle:
             return False
         result = self.lib.client_accept_challenge(
             self.handle,
-            str(challenger_id).encode('utf-8')
+            str(challenger_id).encode('utf-8'),
+            mode.encode('utf-8')
         )
         return result == 1
     
@@ -364,8 +376,10 @@ class ChessClient:
         pass  # Server handles rejection if no accept is sent
     
     def get_leaderboard(self):
-        """Not implemented yet"""
-        pass
+        """Request leaderboard data"""
+        if not self.handle:
+            return False
+        return self.lib.client_request_leaderboard(self.handle) == 1
     
     def get_player_stats(self, username=None):
         """Not implemented yet"""

@@ -408,6 +408,25 @@ def get_lobby_players():
                 "elo": r[2], 
                 "joined_at": r[3]
             } 
+        ]
+    finally:
+        conn.close()
+
+def get_leaderboard_data(limit=100):
+    """
+    Get list of players sorted by ELO descending.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT username, elo 
+            FROM Player 
+            ORDER BY elo DESC 
+            LIMIT ?
+        """, (limit,))
+        return [
+            {"username": r[0], "elo": r[1]} 
             for r in cur.fetchall()
         ]
     finally:

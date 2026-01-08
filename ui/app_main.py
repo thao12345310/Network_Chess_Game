@@ -16,7 +16,7 @@ from screen_game import GameScreen
 class ChessApp:
     """Main application with screen management"""
     
-    def __init__(self):
+    def __init__(self, host='127.0.0.1', port=5001):
         self.root = tk.Tk()
         self.root.title("Network Chess Game")
         self.root.geometry("1200x800")
@@ -26,7 +26,7 @@ class ChessApp:
         self.center_window()
         
         # Network client
-        self.client = ChessClient()
+        self.client = ChessClient(host=host, port=port)
         
         # Current state
         self.current_screen = None
@@ -111,14 +111,15 @@ class ChessApp:
         """Show leaderboard screen"""
         self.show_screen('leaderboard')
     
-    def on_game_start(self, game_id, opponent, your_color, opponent_elo):
+    def on_game_start(self, game_id, opponent, your_color, opponent_elo, time_control="10+0"):
         """Handle game start"""
         self.screens['game'].start_game(
             game_id, 
             opponent, 
             your_color, 
             opponent_elo, 
-            self.player_elo
+            self.player_elo,
+            time_control
         )
         self.show_screen('game')
     
@@ -140,4 +141,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description='Network Chess Client')
+    parser.add_argument('--host', default='127.0.0.1', help='Server IP address')
+    parser.add_argument('--port', type=int, default=5001, help='Server port')
+    args = parser.parse_args()
+
+    app = ChessApp(host=args.host, port=args.port)
+    app.run()

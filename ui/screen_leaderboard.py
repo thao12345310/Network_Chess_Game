@@ -108,7 +108,7 @@ class LeaderboardScreen:
         tree_frame = tk.Frame(table_frame, bg='white')
         tree_frame.pack(fill='both', expand=True, padx=15, pady=10)
         
-        columns = ('Rank', 'Player', 'ELO', 'Wins', 'Losses', 'Draws', 'Win Rate')
+        columns = ('Rank', 'Player', 'ELO')
         self.tree = ttk.Treeview(tree_frame, columns=columns, 
                                 show='headings', height=15)
         
@@ -116,18 +116,10 @@ class LeaderboardScreen:
         self.tree.heading('Rank', text='Rank')
         self.tree.heading('Player', text='Player')
         self.tree.heading('ELO', text='ELO')
-        self.tree.heading('Wins', text='Wins')
-        self.tree.heading('Losses', text='Losses')
-        self.tree.heading('Draws', text='Draws')
-        self.tree.heading('Win Rate', text='Win %')
         
-        self.tree.column('Rank', width=60, anchor='center')
-        self.tree.column('Player', width=180)
-        self.tree.column('ELO', width=80, anchor='center')
-        self.tree.column('Wins', width=70, anchor='center')
-        self.tree.column('Losses', width=70, anchor='center')
-        self.tree.column('Draws', width=70, anchor='center')
-        self.tree.column('Win Rate', width=80, anchor='center')
+        self.tree.column('Rank', width=80, anchor='center')
+        self.tree.column('Player', width=250)
+        self.tree.column('ELO', width=100, anchor='center')
         
         # Scrollbar
         scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', 
@@ -176,11 +168,6 @@ class LeaderboardScreen:
         for idx, player in enumerate(leaderboard, 1):
             username = player.get('username', 'Unknown')
             elo = player.get('elo', 1200)
-            wins = player.get('wins', 0)
-            losses = player.get('losses', 0)
-            draws = player.get('draws', 0)
-            total = wins + losses + draws
-            win_rate = f"{(wins/total*100):.1f}%" if total > 0 else "N/A"
             
             # Rank display
             if idx == 1:
@@ -196,8 +183,7 @@ class LeaderboardScreen:
             tag = 'current_user' if username == self.client.username else ''
             
             self.tree.insert('', 'end', 
-                           values=(rank_display, username, elo, wins, 
-                                  losses, draws, win_rate),
+                           values=(rank_display, username, elo),
                            tags=(tag,))
     
     def show(self):

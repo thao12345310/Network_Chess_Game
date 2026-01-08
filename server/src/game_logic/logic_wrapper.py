@@ -14,7 +14,7 @@ from db_handler import (
     get_player_rating, update_both_players_elo, get_game_details,
     add_to_lobby, remove_from_lobby, get_lobby_players, create_game,
     register_user, verify_user, get_player_id_by_username,
-    get_game_time, update_game_time
+    get_game_time, update_game_time, get_leaderboard_data
 )
 import datetime
 import time
@@ -673,6 +673,10 @@ def main():
                         }
                 except Exception as e:
                     response = {"status": "error", "message": f"Error getting game info: {str(e)}"}
+
+        elif action == 'get_leaderboard':
+            leaderboard = get_leaderboard_data()
+            response = {"status": "success", "leaderboard": leaderboard}
 
         else:
             response = {"status": "error", "message": f"Unknown action: {action}"}

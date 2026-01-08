@@ -35,12 +35,13 @@ void client_logout(ClientHandle handle);
 
 // Lobby operations
 int client_request_player_list(ClientHandle handle);
-int client_join_lobby(ClientHandle handle);
+int client_join_lobby(ClientHandle handle, const char* mode);
 int client_find_match(ClientHandle handle);
+int client_request_leaderboard(ClientHandle handle);
 
 // Challenge operations
-int client_send_challenge(ClientHandle handle, const char* opponentUsername);
-int client_accept_challenge(ClientHandle handle, const char* challengerId);
+int client_send_challenge(ClientHandle handle, const char* opponentUsername, const char* mode);
+int client_accept_challenge(ClientHandle handle, const char* challengerId, const char* mode);
 
 // Game operations
 int client_send_move(ClientHandle handle, const char* fromPos, const char* toPos);
