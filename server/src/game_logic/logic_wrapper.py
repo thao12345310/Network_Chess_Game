@@ -514,6 +514,143 @@ def main():
                     "message": f"Error processing move: {str(e)}"
                 }
 
+        elif action == 'resign_game':
+            # Handle game resignation
+            game_id = req.get('game_id')
+            player_id = req.get('player_id')
+            
+            if not game_id or not player_id:
+                response = {"status": "error", "message": "Missing game_id or player_id"}
+            else:
+                try:
+                    # Get game info to determine winner
+                    game_info = get_game_info(game_id)
+                    if not game_info:
+                        response = {"status": "error", "message": "Game not found"}
+                    else:
+                        # game_info indices: 1=white_id, 2=black_id
+                        white_id = game_info[1]
+                        black_id = game_info[2]
+                        
+                        # Resigning player loses, opponent wins
+                        if player_id == white_id:
+                            winner_id = black_id
+                            opponent_id = black_id
+                        elif player_id == black_id:
+                            winner_id = white_id
+                            opponent_id = white_id
+                        else:
+                            response = {"status": "error", "message": "Player not in this game"}
+                            print(json.dumps(response))
+                            return
+                        
+                        # Update game result
+                        update_game_result(
+                            game_id,
+                            winner_id,
+                            'FINISHED',
+                            datetime.datetime.utcnow().isoformat()
+                        )
+                        
+                        # Calculate ELO changes
+                        # Winner gets 1.0, loser gets 0.0
+                        winner_rating = get_player_rating(winner_id)
+                        loser_rating = get_player_rating(player_id)
+                        
+                        new_winner_elo, new_loser_elo = calculate_elo(
+                            winner_rating, 
+                            loser_rating, 
+                            1.0  # Winner's score
+                        )
+                        
+                        # Update ELO in database
+                        update_both_players_elo(winner_id, new_winner_elo, player_id, new_loser_elo)
+                        
+                        response = {
+                            "status": "success",
+                            "responseCode": 200,
+                            "game_id": game_id,
+                            "winner_id": winner_id,
+                            "opponent_id": opponent_id,
+                            "winner_elo": new_winner_elo,
+                            "loser_elo": new_loser_elo
+                        }
+                        
+                except Exception as e:
+                    response = {"status": "error", "message": f"Error processing resignation: {str(e)}"}
+        
+        elif action == 'accept_draw':
+            # Handle draw acceptance
+            game_id = req.get('game_id')
+            
+            if not game_id:
+                response = {"status": "error", "message": "Missing game_id"}
+            else:
+                try:
+                    # Get game info
+                    game_info = get_game_info(game_id)
+                    if not game_info:
+                        response = {"status": "error", "message": "Game not found"}
+                    else:
+                        white_id = game_info[1]
+                        black_id = game_info[2]
+                        
+                        # Update game result to draw (winner_id = NULL)
+                        update_game_result(
+                            game_id,
+                            None,  # No winner in draw
+                            'FINISHED',
+                            datetime.datetime.utcnow().isoformat()
+                        )
+                        
+                        # Calculate ELO for draw (0.5 points each)
+                        white_rating = get_player_rating(white_id)
+                        black_rating = get_player_rating(black_id)
+                        
+                        new_white_elo, new_black_elo = calculate_elo(
+                            white_rating, 
+                            black_rating, 
+                            0.5  # Draw = 0.5 points each
+                        )
+                        
+                        # Update ELO in database
+                        update_both_players_elo(white_id, new_white_elo, black_id, new_black_elo)
+                        
+                        response = {
+                            "status": "success",
+                            "game_id": game_id,
+                            "white_id": white_id,
+                            "black_id": black_id,
+                            "white_elo": new_white_elo,
+                            "black_elo": new_black_elo
+                        }
+                        
+                except Exception as e:
+                    response = {"status": "error", "message": f"Error accepting draw: {str(e)}"}
+        
+        elif action == 'get_game_info':
+            # Get basic game info for withdraw offer handling
+            game_id = req.get('game_id')
+            if not game_id:
+                response = {"status": "error", "message": "Missing game_id"}
+            else:
+                try:
+                    game_info = get_game_info(game_id)
+                    if not game_info:
+                        response = {"status": "error", "message": "Game not found"}
+                    else:
+                        # game_info tuple: (game_id, white_id, black_id, mode, start_time, end_time, winner_id, status, current_fen, white_time, black_time, last_move_time)
+                        response = {
+                            "status": "success",
+                            "game_id": game_info[0],
+                            "white_id": game_info[1],
+                            "black_id": game_info[2],
+                            "mode": game_info[3],
+                            "status": game_info[7]
+                        }
+                except Exception as e:
+                    response = {"status": "error", "message": f"Error getting game info: {str(e)}"}
+
         else:
             response = {"status": "error", "message": f"Unknown action: {action}"}
 

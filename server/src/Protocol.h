@@ -41,6 +41,15 @@ namespace Protocol {
         constexpr const char* EMOJI_SEND = "EMOJI_SEND";
         constexpr const char* EMOJI_UPDATE = "EMOJI_UPDATE";
         
+        // Game Actions
+        constexpr const char* GAME_RESIGN = "GAME_RESIGN";
+        constexpr const char* GAME_END = "GAME_END";
+        constexpr const char* DRAW_OFFER = "DRAW_OFFER";
+        constexpr const char* DRAW_OFFER_ACK = "DRAW_OFFER_ACK";
+        constexpr const char* DRAW_OFFER_NOTIFY = "DRAW_OFFER_NOTIFY";
+        constexpr const char* DRAW_ACCEPT = "DRAW_ACCEPT";
+        constexpr const char* DRAW_DECLINE = "DRAW_DECLINE";
+        
         // Errors
         constexpr const char* ERROR = "ERROR";
 

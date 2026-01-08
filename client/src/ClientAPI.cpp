@@ -269,6 +269,22 @@ extern "C"
         return wrapper->client->offerDraw() ? 1 : 0;
     }
 
+    int client_accept_draw(ClientHandle handle)
+    {
+        if (!handle)
+            return 0;
+        ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
+        return wrapper->client->acceptDraw() ? 1 : 0;
+    }
+
+    int client_decline_draw(ClientHandle handle)
+    {
+        if (!handle)
+            return 0;
+        ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
+        return wrapper->client->declineDraw() ? 1 : 0;
+    }
+
     const char *client_get_username(ClientHandle handle)
     {
         if (!handle)

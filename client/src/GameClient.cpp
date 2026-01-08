@@ -109,10 +109,13 @@ bool GameClient::acceptChallenge(const std::string &challengeId)
     Json::Value msg;
     msg["messageType"] = "CHALLENGE_RESP";
     // Send challenger_id as an integer - the server expects this field
-    try {
+    try
+    {
         int challengerIdInt = std::stoi(challengeId);
         msg["payload"]["challenger_id"] = challengerIdInt;
-    } catch (...) {
+    }
+    catch (...)
+    {
         // Fallback to string if conversion fails
         msg["payload"]["challenger_id"] = challengeId;
     }
@@ -126,10 +129,13 @@ bool GameClient::declineChallenge(const std::string &challengeId)
     Json::Value msg;
     msg["messageType"] = "CHALLENGE_RESP";
     // Send challenger_id as an integer - the server expects this field
-    try {
+    try
+    {
         int challengerIdInt = std::stoi(challengeId);
         msg["payload"]["challenger_id"] = challengerIdInt;
-    } catch (...) {
+    }
+    catch (...)
+    {
         // Fallback to string if conversion fails
         msg["payload"]["challenger_id"] = challengeId;
     }
@@ -142,9 +148,12 @@ bool GameClient::sendMove(const std::string &fromPos, const std::string &toPos)
 {
     Json::Value msg;
     msg["messageType"] = "MOVE_REQ";
-    try {
+    try
+    {
         msg["payload"]["game_id"] = std::stoi(currentGameId);
-    } catch (...) {
+    }
+    catch (...)
+    {
         msg["payload"]["game_id"] = 0;
     }
     msg["payload"]["from"] = fromPos;
@@ -269,7 +278,8 @@ void GameClient::processMessage(const Json::Value &msg)
         }
     }
     else if (type == "MOVE_UPDATE" || type == "MOVE_ACK" ||
-             type == "MATCH_START" || type == "GAME_END")
+             type == "MATCH_START" || type == "GAME_END" ||
+             type == "DRAW_OFFER_NOTIFY")
     {
         if (onGameUpdate)
         {

@@ -93,6 +93,12 @@ class ChessClient:
         lib.client_offer_draw.argtypes = [ctypes.c_void_p]
         lib.client_offer_draw.restype = ctypes.c_int
         
+        lib.client_accept_draw.argtypes = [ctypes.c_void_p]
+        lib.client_accept_draw.restype = ctypes.c_int
+        
+        lib.client_decline_draw.argtypes = [ctypes.c_void_p]
+        lib.client_decline_draw.restype = ctypes.c_int
+        
         # Challenge functions
         lib.client_send_challenge.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
         lib.client_send_challenge.restype = ctypes.c_int
@@ -291,6 +297,18 @@ class ChessClient:
         if not self.handle:
             return False
         return self.lib.client_offer_draw(self.handle) == 1
+    
+    def accept_draw(self, game_id):
+        """Accept draw offer"""
+        if not self.handle:
+            return False
+        return self.lib.client_accept_draw(self.handle) == 1
+    
+    def decline_draw(self, game_id):
+        """Decline draw offer"""
+        if not self.handle:
+            return False
+        return self.lib.client_decline_draw(self.handle) == 1
     
     # Challenge methods
     def send_challenge(self, opponent):

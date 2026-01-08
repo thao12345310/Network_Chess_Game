@@ -6,37 +6,30 @@
 #include <utility>
 
 StreamServer::StreamServer(int port, MessageHandler handler)
-    : port(port), handler(std::move(handler)), serverSocket(INVALID_SOCKET), running(false) {
-#ifdef _WIN32
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        std::cerr << "WSAStartup failed" << std::endl;
-    }
-#endif
+    : port(port), handler(std::move(handler)), serverSocket(INVALID_SOCKET), running(false)
+{
 }
 
-StreamServer::~StreamServer() {
+StreamServer::~StreamServer()
+{
     stop();
-#ifdef _WIN32
-    WSACleanup();
-#endif
 }
 
-void StreamServer::stop() {
+void StreamServer::stop()
+{
     running = false;
-    if (serverSocket != INVALID_SOCKET) {
-#ifdef _WIN32
-        closesocket(serverSocket);
-#else
+    if (serverSocket != INVALID_SOCKET)
+    {
         close(serverSocket);
-#endif
         serverSocket = INVALID_SOCKET;
     }
 }
 
-void StreamServer::start() {
+void StreamServer::start()
+{
     serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverSocket == INVALID_SOCKET) {
+    if (serverSocket == INVALID_SOCKET)
+    {
         std::cerr << "Failed to create socket" << std::endl;
         return;
     }
@@ -49,13 +42,15 @@ void StreamServer::start() {
     serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     serverAddr.sin_port = htons(port);
 
-    if (bind(serverSocket, reinterpret_cast<sockaddr *>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR) {
+    if (bind(serverSocket, reinterpret_cast<sockaddr *>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR)
+    {
         std::cerr << "Bind failed" << std::endl;
         stop();
         return;
     }
 
-    if (listen(serverSocket, 5) == SOCKET_ERROR) {
+    if (listen(serverSocket, 5) == SOCKET_ERROR)
+    {
         std::cerr << "Listen failed" << std::endl;
         stop();
         return;
@@ -64,13 +59,16 @@ void StreamServer::start() {
     running = true;
     std::cout << "Stream server listening on 127.0.0.1:" << port << std::endl;
 
-    while (running) {
+    while (running)
+    {
         SOCKET clientSocket = accept(serverSocket, nullptr, nullptr);
-        if (!running) {
+        if (!running)
+        {
             break;
         }
 
-        if (clientSocket == INVALID_SOCKET) {
+        if (clientSocket == INVALID_SOCKET)
+        {
             std::cerr << "Accept failed" << std::endl;
             continue;
         }
@@ -82,17 +80,21 @@ void StreamServer::start() {
     stop();
 }
 
-void StreamServer::setOnConnectionClosed(OnConnectionClosed callback) {
+void StreamServer::setOnConnectionClosed(OnConnectionClosed callback)
+{
     onConnectionClosed = std::move(callback);
 }
 
-void StreamServer::handleClient(SOCKET clientSocket) {
+void StreamServer::handleClient(SOCKET clientSocket)
+{
     std::string messageBuffer;
     char buffer[4096];
-    
-    while (true) {
+
+    while (true)
+    {
         int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-        if (bytesReceived <= 0) {
+        if (bytesReceived <= 0)
+        {
             break;
         }
 
@@ -101,22 +103,26 @@ void StreamServer::handleClient(SOCKET clientSocket) {
 
         // Process complete messages (lines ending with \n)
         size_t pos;
-        while ((pos = messageBuffer.find('\n')) != std::string::npos) {
+        while ((pos = messageBuffer.find('\n')) != std::string::npos)
+        {
             std::string line = messageBuffer.substr(0, pos);
             messageBuffer.erase(0, pos + 1);
 
             // Remove \r if present (Windows line ending)
-            if (!line.empty() && line.back() == '\r') {
+            if (!line.empty() && line.back() == '\r')
+            {
                 line.pop_back();
             }
 
-            if (line.empty()) {
+            if (line.empty())
+            {
                 continue;
             }
 
             // Pass socket to handler
             std::string response = handler ? handler(clientSocket, line) : "";
-            if (response.empty()) {
+            if (response.empty())
+            {
                 response = "{\"status\": \"error\", \"message\": \"Empty response\"}";
             }
             send(clientSocket, response.c_str(), static_cast<int>(response.length()), 0);
@@ -124,14 +130,10 @@ void StreamServer::handleClient(SOCKET clientSocket) {
         }
     }
 
-    if (onConnectionClosed) {
+    if (onConnectionClosed)
+    {
         onConnectionClosed(clientSocket);
     }
 
-#ifdef _WIN32
-    closesocket(clientSocket);
-#else
     close(clientSocket);
-#endif
 }
-

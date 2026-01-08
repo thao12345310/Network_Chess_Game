@@ -202,6 +202,8 @@ class GameScreen:
         self.client.set_callback('MOVE_ACK', self.on_move_response)
         self.client.set_callback('MOVE_UPDATE', self.on_game_update)
         self.client.set_callback('EMOJI_UPDATE', self.on_emoji_update)
+        self.client.set_callback('GAME_END', self.on_game_end_msg)
+        self.client.set_callback('DRAW_OFFER_NOTIFY', self.on_draw_offer_received)
     
     def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo):
         """Initialize game with data"""
@@ -428,22 +430,45 @@ class GameScreen:
     
     def on_game_end_msg(self, msg):
         """Handle game end"""
-        winner = msg.get('winner')
-        reason = msg.get('reason', 'Game ended')
-        elo_change = msg.get('elo_change', 0)
-        new_elo = msg.get('new_elo', self.player_elo)
+        payload = msg.get('payload', {})
+        result = payload.get('result', 'unknown')  # "win", "loss", "draw"
+        reason = payload.get('reason', 'Game ended')
+        new_elo = payload.get('new_elo', self.player_elo)
         
-        if winner == self.client.username:
+        # Calculate ELO change
+        elo_change = new_elo - self.player_elo if self.player_elo else 0
+        
+        if result == "win":
             result_text = f"🎉 You Won! 🎉\n\n{reason}\n\nELO: {self.player_elo} → {new_elo} (+{elo_change})"
-        elif winner == 'draw':
-            result_text = f"🤝 Draw\n\n{reason}\n\nELO: {self.player_elo} → {new_elo}"
-        else:
+        elif result == "draw":
+            result_text = f"🤝 Draw\n\n{reason}\n\nELO: {self.player_elo} → {new_elo} ({elo_change:+d})"
+        else:  # loss
             result_text = f"😞 You Lost\n\n{reason}\n\nELO: {self.player_elo} → {new_elo} ({elo_change})"
         
         messagebox.showinfo("Game Over", result_text)
         
         self.hide()
         self.on_game_end(new_elo)
+    
+    def on_draw_offer_received(self, msg):
+        """Handle draw offer from opponent"""
+        payload = msg.get('payload', {})
+        from_id = payload.get('from_id')
+        game_id = payload.get('game_id')
+        
+        # Show confirmation dialog
+        response = messagebox.askyesno(
+            "Draw Offer",
+            f"Your opponent offers a draw.\n\nDo you accept?"
+        )
+        
+        if response:
+            # Accept draw - send to network client
+            # The C++ client will handle sending DRAW_ACCEPT message
+            self.client.accept_draw(game_id)
+        else:
+            # Decline draw
+            self.client.decline_draw(game_id)
     
     def show(self):
         """Show game screen"""

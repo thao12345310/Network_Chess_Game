@@ -47,6 +47,8 @@ int client_send_move(ClientHandle handle, const char* fromPos, const char* toPos
 int client_send_emoji(ClientHandle handle, const char* emoji);
 int client_resign(ClientHandle handle);
 int client_offer_draw(ClientHandle handle);
+int client_accept_draw(ClientHandle handle);
+int client_decline_draw(ClientHandle handle);
 
 // State accessors
 const char* client_get_username(ClientHandle handle);

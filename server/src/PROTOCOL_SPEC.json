@@ -173,6 +173,99 @@
             }
         }
     },
+    "game_actions": {
+        "GAME_RESIGN": {
+            "direction": "Client -> Server",
+            "description": "Player resigns from current game",
+            "example": {
+                "messageType": "GAME_RESIGN",
+                "payload": {
+                    "game_id": 12345
+                }
+            }
+        },
+        "GAME_END": {
+            "direction": "Server -> Client",
+            "description": "Notify player that game has ended",
+            "example": {
+                "messageType": "GAME_END",
+                "responseCode": 200,
+                "payload": {
+                    "game_id": 12345,
+                    "result": "win",
+                    "reason": "opponent_resigned",
+                    "new_elo": 1250
+                }
+            },
+            "result_values": {
+                "win": "Player won the game",
+                "loss": "Player lost the game",
+                "draw": "Game ended in a draw"
+            },
+            "reason_values": {
+                "resigned": "Player resigned",
+                "opponent_resigned": "Opponent resigned",
+                "timeout": "Time ran out",
+                "checkmate": "Checkmate",
+                "stalemate": "Stalemate",
+                "draw_accepted": "Draw offer accepted"
+            }
+        },
+        "DRAW_OFFER": {
+            "direction": "Client -> Server",
+            "description": "Player offers a draw to opponent",
+            "example": {
+                "messageType": "DRAW_OFFER",
+                "payload": {
+                    "game_id": 12345
+                }
+            }
+        },
+        "DRAW_OFFER_ACK": {
+            "direction": "Server -> Client",
+            "description": "Acknowledge draw offer sent",
+            "example": {
+                "messageType": "DRAW_OFFER_ACK",
+                "responseCode": 200,
+                "payload": {
+                    "game_id": 12345,
+                    "status": "sent"
+                }
+            }
+        },
+        "DRAW_OFFER_NOTIFY": {
+            "direction": "Server -> Client",
+            "description": "Notify opponent of draw offer",
+            "example": {
+                "messageType": "DRAW_OFFER_NOTIFY",
+                "responseCode": 200,
+                "payload": {
+                    "game_id": 12345,
+                    "from_id": 123
+                }
+            }
+        },
+        "DRAW_ACCEPT": {
+            "direction": "Client -> Server",
+            "description": "Player accepts draw offer",
+            "example": {
+                "messageType": "DRAW_ACCEPT",
+                "payload": {
+                    "game_id": 12345
+                }
+            }
+        },
+        "DRAW_DECLINE": {
+            "direction": "Client -> Server",
+            "description": "Player declines draw offer",
+            "example": {
+                "messageType": "DRAW_DECLINE",
+                "payload": {
+                    "game_id": 12345
+                }
+            }
+        }
+    },
     "errors": {
         "ERROR": {
             "direction": "Server -> Client",
