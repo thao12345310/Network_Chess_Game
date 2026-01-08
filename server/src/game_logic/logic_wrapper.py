@@ -461,6 +461,21 @@ def main():
                             'FINISHED',
                             datetime.datetime.utcnow().isoformat()
                         )
+                        
+                        # Calculate and Update ELO
+                        white_rating = get_player_rating(white_id)
+                        black_rating = get_player_rating(black_id)
+                        
+                        score_white = 0.5
+                        if game_result == 'checkmate':
+                            if winner_id == white_id:
+                                score_white = 1.0
+                            else:
+                                score_white = 0.0
+                        
+                        new_white_elo, new_black_elo = calculate_elo(white_rating, black_rating, score_white)
+                        update_both_players_elo(white_id, new_white_elo, black_id, new_black_elo)
+
                     
                     # Return opponent_id for broadcasting
                     opponent_id = white_id if current_player_id == black_id else black_id
@@ -483,6 +498,13 @@ def main():
                              "to": to_pos
                         }
                     }
+
+                    if game_result in ['checkmate', 'draw']:
+                         response['new_white_elo'] = new_white_elo
+                         response['new_black_elo'] = new_black_elo
+                         response['white_id'] = white_id
+                         response['black_id'] = black_id
+                         response['winner_id'] = winner_id
                 else:
                     # Invalid move
                     # We might want to revert the time deduction? 

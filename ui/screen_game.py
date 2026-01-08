@@ -5,7 +5,7 @@ Game Screen - Màn hình chơi cờ
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 from chess_board import ChessBoard
 
 
@@ -33,7 +33,7 @@ class GameScreen:
     def setup_ui(self):
         """Setup game UI"""
         # Top bar - Game info
-        top_bar = tk.Frame(self.frame, bg='#2C3E50', height=80)
+        top_bar = tk.Frame(self.frame, bg='#2C3E50', height=120)
         top_bar.pack(fill='x')
         top_bar.pack_propagate(False)
         
@@ -55,6 +55,11 @@ class GameScreen:
                                          fg='#BDC3C7', bg='#34495E')
         self.player_elo_label.pack(padx=20, pady=(0, 5))
         
+        self.player_time_label = tk.Label(self.player_frame, text="10:00",
+                                          font=("Arial", 16, "bold"),
+                                          fg='#2ECC71', bg='#34495E')
+        self.player_time_label.pack(padx=20, pady=(5, 10))
+        
         # VS label
         tk.Label(match_frame, text="VS", 
                 font=("Arial", 20, "bold"), 
@@ -73,6 +78,11 @@ class GameScreen:
                                           font=("Arial", 10), 
                                           fg='#BDC3C7', bg='#34495E')
         self.opponent_elo_label.pack(padx=20, pady=(0, 5))
+        
+        self.opponent_time_label = tk.Label(self.opponent_frame, text="10:00",
+                                            font=("Arial", 16, "bold"),
+                                            fg='#F39C12', bg='#34495E')
+        self.opponent_time_label.pack(padx=20, pady=(5, 10))
         
         # Main game area
         game_area = tk.Frame(self.frame, bg='#ECF0F1')
@@ -313,11 +323,53 @@ class GameScreen:
                 from_pos = self.chess_board.pos_to_notation(from_row, from_col)
                 to_pos = self.chess_board.pos_to_notation(row, col)
                 
-                # Update local board
-                # self.chess_board.make_move(from_row, from_col, row, col) # Disabled for "Check then Move"
+                # CASTLING UI FIX: If we clicked the Rook, check if it's meant to be a castling move
+                # and translate to the standard UCI format (e1g1, e1c1, etc.)
+                piece_at_dest = self.chess_board.get_piece(row, col)
+                piece_at_source = self.chess_board.get_piece(from_row, from_col)
                 
-                # Send to server
-                # Send to server
+                # Check for Castling via Rook click
+                if piece_at_source.lower() == 'k' and piece_at_dest.lower() == 'r':
+                    # White Kingside (e1 -> h1 clicked, translates to e1g1)
+                    if from_pos == 'e1' and to_pos == 'h1': 
+                        to_pos = 'g1'
+                    # White Queenside (e1 -> a1 clicked, translates to e1c1)
+                    elif from_pos == 'e1' and to_pos == 'a1': 
+                        to_pos = 'c1'
+                    # Black Kingside (e8 -> h8 clicked, translates to e8g8)
+                    elif from_pos == 'e8' and to_pos == 'h8': 
+                        to_pos = 'g8'
+                    # Black Queenside (e8 -> a8 clicked, translates to e8c8)
+                    elif from_pos == 'e8' and to_pos == 'a8': 
+                        to_pos = 'c8'
+
+                # Check for Pawn Promotion
+                piece = self.chess_board.get_piece(from_row, from_col)
+                promotion = ""
+                
+                if piece:
+                     is_white = piece.isupper()
+                     is_pawn = piece.lower() == 'p'
+                     
+                     # Check if reaching last rank
+                     # White (P) moves to row 0. Black (p) moves to row 7.
+                     # WARNING: 'row' here is destination row.
+                     if is_pawn:
+                         # Use raw row for logic consistent with promotion
+                         if (is_white and row == 0) or (not is_white and row == 7):
+                             choice = simpledialog.askstring(
+                                 "Promotion", 
+                                 "Promote to (q=Queen, r=Rook, b=Bishop, n=Knight):", 
+                                 parent=self.root
+                             )
+                             if choice and choice.lower() in ['q', 'r', 'b', 'n']:
+                                 promotion = choice.lower()
+                             else:
+                                 promotion = 'q' # Default to Queen
+                
+                if promotion:
+                    to_pos += promotion
+
                 # Send to server
                 if self.client.connected and self.game_id:
                     self.client.make_move(self.game_id, from_pos, to_pos)
@@ -389,30 +441,27 @@ class GameScreen:
                 self.chess_board.set_fen(next_fen)
                 self.chess_board.draw()
                 
+                # Update Times
+                self.update_times(payload)
+                
                 # Add to history
                 from_pos = payload.get('from') or msg.get('from')
                 to_pos = payload.get('to') or msg.get('to')
                 if from_pos and to_pos:
                      self.add_move(from_pos, to_pos)
             else:
-                 # Fallback if no FEN: maybe just make the move?
-                 # But we don't have from/to easily here unless we stored it.
+                 # Fallback if no FEN
                  pass
     
     def on_game_update(self, msg):
         """Handle game update"""
         payload = msg.get('payload', {})
-        move = payload.get('last_move') or msg.get('last_move') # Protocol: payload.last_move or top level?
-        # My NetworkInterface sends `payload: {last_move: {...}, fen: ...}`. 
-        # But `on_game_update_callback` in client might unwrap it?
-        # Let's handle both.
+        move = payload.get('last_move') or msg.get('last_move') 
         
         if move:
             # Opponent's move
             from_pos = move.get('from', '?')
             to_pos = move.get('to', '?')
-            # self.add_move(from_pos, to_pos) # Don't add move yet if we update FEN, or add it here?
-            # Ideally update board FEN, then log move.
             
             # Update board from server state
             fen = payload.get('fen')
@@ -420,7 +469,33 @@ class GameScreen:
                 self.chess_board.set_fen(fen)
                 self.chess_board.draw()
             
+            # Update Times
+            self.update_times(payload)
+            
             self.add_move(from_pos, to_pos)
+
+    def update_times(self, payload):
+        """Update timer labels from payload"""
+        white_time = payload.get('white_time')
+        black_time = payload.get('black_time')
+        
+        if white_time is not None and black_time is not None:
+            # Format time mm:ss
+            def format_time(seconds):
+                m = int(seconds // 60)
+                s = int(seconds % 60)
+                return f"{m:02d}:{s:02d}"
+            
+            w_str = format_time(float(white_time))
+            b_str = format_time(float(black_time))
+            
+            # Identify who is who
+            if self.player_color == 'white':
+                self.player_time_label.config(text=w_str)
+                self.opponent_time_label.config(text=b_str)
+            else:
+                self.player_time_label.config(text=b_str)
+                self.opponent_time_label.config(text=w_str)
     
     def on_emoji_update(self, msg):
         """Handle emoji/chat update from opponent"""

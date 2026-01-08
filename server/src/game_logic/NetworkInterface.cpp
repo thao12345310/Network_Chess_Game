@@ -138,6 +138,30 @@ static std::string get_json_string(const std::string &json, const std::string &k
     return json.substr(quote_start + 1, quote_end - quote_start - 1);
 }
 
+static double get_json_double(const std::string &json, const std::string &key)
+{
+    std::string key_str = "\"" + key + "\":";
+    size_t pos = json.find(key_str);
+    if (pos == std::string::npos)
+    {
+        key_str = "\"" + key + "\": ";
+        pos = json.find(key_str);
+    }
+    if (pos == std::string::npos)
+        return 600.0; // Default fallback
+
+    size_t val_start = pos + key_str.length();
+    // Skip spaces
+    while (val_start < json.length() && (json[val_start] == ' ' || json[val_start] == '\t'))
+        val_start++;
+    
+    // Check if we hit end or invalid char
+    if (val_start >= json.length()) return 600.0;
+    
+    // Parse double manually to avoid complex dependencies or just use atof
+    return std::atof(json.c_str() + val_start);
+}
+
 std::string NetworkInterface::execute_logic_command(const std::string &request)
 {
     std::string escaped_request;
@@ -1132,6 +1156,8 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                 std::string from_pos = get_json_string(result, "from");
                 std::string to_pos = get_json_string(result, "to");
                 std::string next_fen = get_json_string(result, "next_fen");
+                double white_time = get_json_double(result, "white_time");
+                double black_time = get_json_double(result, "black_time");
 
                 // Construct MOVE_UPDATE
                 // We should ideally extract the whole payload or reconstruct it
@@ -1158,10 +1184,57 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                                                  from_pos + "\", \"to\": \"" + to_pos + "\"}, "
                                                                                         "\"fen\": \"" +
                                                  next_fen + "\", "
-                                                            "\"status\": \"update\"}}";
+                                                            "\"white_time\": " +
+                                                 std::to_string(white_time) + ", "
+                                                                              "\"black_time\": " +
+                                                 std::to_string(black_time) + ", "
+                                                                              "\"status\": \"update\"}}";
                         send(opponentSocket, update_msg.c_str(), static_cast<int>(update_msg.length()), 0);
                         send(opponentSocket, "\n", 1, 0);
                         std::cout << "Broadcasted MOVE_UPDATE to player " << opponent_id << std::endl;
+                    }
+                }
+
+                // Check for Game Over (Checkmate/Draw)
+                std::string game_result = get_json_string(result, "game_result");
+                if (game_result == "checkmate" || game_result == "draw")
+                {
+                    int white_id = get_json_int(result, "white_id");
+                    int black_id = get_json_int(result, "black_id");
+                    int new_white_elo = get_json_int(result, "new_white_elo");
+                    int new_black_elo = get_json_int(result, "new_black_elo");
+                    int winner_id = get_json_int(result, "winner_id");
+                    int game_id = get_json_int(request, "game_id");
+
+                    std::cout << "Game Over: " << game_result << " (Winner: " << winner_id << ")" << std::endl;
+
+                    std::lock_guard<std::mutex> lock(session_mutex);
+                    for (auto const &[sock, pid] : client_sessions)
+                    {
+                         if (pid == white_id || pid == black_id) 
+                         {
+                             std::string result_str = "draw";
+                             std::string reason_str = (game_result == "checkmate") ? "checkmate" : "draw";
+                             int new_elo = 0;
+
+                             if (pid == white_id) new_elo = new_white_elo;
+                             else new_elo = new_black_elo;
+
+                             if (game_result == "checkmate") {
+                                 if (pid == winner_id) result_str = "win";
+                                 else result_str = "loss";
+                             }
+                             
+                             std::string end_msg = "{\"messageType\": \"GAME_END\", \"responseCode\": 200, \"payload\": {"
+                                                   "\"game_id\": " + std::to_string(game_id) + ", "
+                                                   "\"result\": \"" + result_str + "\", "
+                                                   "\"reason\": \"" + reason_str + "\", "
+                                                   "\"new_elo\": " + std::to_string(new_elo) + "}}";
+                             
+                             send(sock, end_msg.c_str(), static_cast<int>(end_msg.length()), 0);
+                             send(sock, "\n", 1, 0);
+                             std::cout << "Sent GAME_END to player " << pid << std::endl;
+                         }
                     }
                 }
             }

@@ -191,10 +191,12 @@ class ChessBoard:
             return self.board[row][col]
         return None
     
+    
     def get_valid_moves(self, row, col):
         """
         Get list of valid move squares for the piece at (row, col).
         Returns list of (row, col) tuples representing valid destinations.
+        Also explicitly includes Rook squares for castling to aid UI highlighting.
         """
         if not HAS_CHESS:
             return []
@@ -211,6 +213,21 @@ class ChessBoard:
                     to_pos = self.notation_to_pos(to_notation)
                     if to_pos:
                         valid_moves.append(to_pos)
+                        
+                    # If this is a castling move, also highlight the Rook
+                    # Kingside White: e1g1 -> Highlight h1
+                    # Queenside White: e1c1 -> Highlight a1
+                    # Kingside Black: e8g8 -> Highlight h8
+                    # Queenside Black: e8c8 -> Highlight a8
+                    if board.is_castling(move):
+                        if move.to_square == chess.G1:
+                             valid_moves.append(self.notation_to_pos('h1'))
+                        elif move.to_square == chess.C1:
+                             valid_moves.append(self.notation_to_pos('a1'))
+                        elif move.to_square == chess.G8:
+                             valid_moves.append(self.notation_to_pos('h8'))
+                        elif move.to_square == chess.C8:
+                             valid_moves.append(self.notation_to_pos('a8'))
             
             return valid_moves
         except Exception as e:
