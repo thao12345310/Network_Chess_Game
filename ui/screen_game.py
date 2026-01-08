@@ -24,6 +24,9 @@ class GameScreen:
         self.player_color = None
         self.player_elo = None
         
+        # Store original MATCH_START callback from Lobby (to restore later)
+        self.lobby_match_start_callback = None
+        
         # Main frame
         self.frame = tk.Frame(root, bg='#ECF0F1')
         
@@ -216,6 +219,8 @@ class GameScreen:
         self.client.set_callback('DRAW_OFFER_NOTIFY', self.on_draw_offer_received)
         self.client.set_callback('REMATCH_REQUEST_NOTIFY', self.on_rematch_request_received)
         self.client.set_callback('REMATCH_DECLINED_NOTIFY', self.on_rematch_declined)
+        # NOTE: DO NOT register MATCH_START here - it will override Lobby's callback
+        # MATCH_START for rematch is registered dynamically when needed
     
     def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo):
         """Initialize game with data"""
@@ -225,6 +230,15 @@ class GameScreen:
         self.player_color = your_color
         self.opponent_elo = opponent_elo
         self.player_elo = player_elo
+        
+        # Save Lobby's MATCH_START callback before overriding it
+        if 'MATCH_START' in self.client.callbacks and self.lobby_match_start_callback is None:
+            self.lobby_match_start_callback = self.client.callbacks['MATCH_START']
+            print("DEBUG: Saved Lobby's MATCH_START callback")
+        
+        # Register our MATCH_START callback now (for rematch)
+        self.client.set_callback('MATCH_START', self.on_match_start)
+        print("DEBUG: Registered GameScreen's MATCH_START callback")
         
         # Update UI
         self.player_name_label.config(text=f"👤 {self.client.username}")
@@ -570,6 +584,42 @@ class GameScreen:
         self.hide()
         self.on_game_end(self.player_elo)
     
+    def on_match_start(self, msg):
+        """Handle MATCH_START message - ONLY for rematch"""
+        payload = msg.get('payload', {})
+        game_id = payload.get('game_id')
+        is_rematch = payload.get('is_rematch', False)
+        
+        # IMPORTANT: Only handle if this is a rematch
+        # Regular MATCH_START from challenge is handled by Lobby screen
+        if not is_rematch:
+            print(f"DEBUG: MATCH_START received but not rematch - ignoring (Lobby will handle)")
+            return
+        
+        white_id = payload.get('white_id')
+        black_id = payload.get('black_id')
+        mode = payload.get('mode', 'RAPID')
+        
+        print(f"DEBUG: REMATCH MATCH_START - Game {game_id}, white={white_id}, black={black_id}")
+        
+        # For rematch, swap colors from previous game
+        if hasattr(self, 'player_color') and self.player_color:
+            new_color = 'black' if self.player_color == 'white' else 'white'
+            print(f"DEBUG: Rematch - swapping color from {self.player_color} to {new_color}")
+        else:
+            # Fallback (shouldn't happen in rematch)
+            new_color = 'white'
+            print(f"WARNING: Rematch but no previous color - defaulting to white")
+        
+        # Reset and start new game
+        self.start_game(
+            game_id=game_id,
+            opponent=self.opponent_name if hasattr(self, 'opponent_name') else "Opponent",
+            your_color=new_color,
+            opponent_elo=self.opponent_elo if hasattr(self, 'opponent_elo') else 1200,
+            player_elo=self.player_elo if hasattr(self, 'player_elo') else 1200
+        )
+    
     def on_draw_offer_received(self, msg):
         """Handle draw offer from opponent"""
         payload = msg.get('payload', {})
@@ -597,6 +647,12 @@ class GameScreen:
     def hide(self):
         """Hide game screen"""
         self.frame.pack_forget()
+        
+        # Restore Lobby's MATCH_START callback
+        if self.lobby_match_start_callback is not None:
+            self.client.set_callback('MATCH_START', self.lobby_match_start_callback)
+            print("DEBUG: Restored Lobby's MATCH_START callback")
+
 
 # ============== TEST MODE ==============
 
