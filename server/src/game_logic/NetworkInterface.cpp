@@ -86,6 +86,17 @@ void NetworkInterface::handle_disconnect(SOCKET clientSocket)
             std::string command = cmd_prefix + " \"{\\\"action\\\": \\\"leave_lobby\\\", \\\"player_id\\\": " + std::to_string(player_id) + "}\"";
             system(command.c_str());
         }
+        
+        // Remove from matchmaking queue if waiting
+        for (auto mit = matchmaking_queue.begin(); mit != matchmaking_queue.end(); ++mit)
+        {
+            if (mit->player_id == player_id)
+            {
+                matchmaking_queue.erase(mit);
+                std::cout << "Removed player " << player_id << " from matchmaking queue" << std::endl;
+                break;
+            }
+        }
     }
     else
     {
@@ -315,34 +326,90 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
             return "{\"messageType\": \"ERROR\", \"responseCode\": 401, \"payload\": {\"reason\": \"Not logged in\"}}";
         }
 
-        std::lock_guard<std::mutex> lock(session_mutex);
+        // Get requested game mode
+        std::string requested_mode = get_json_string(request, "mode");
+        if (requested_mode.empty()) requested_mode = "RAPID";
+        
+        std::cout << "DEBUG MATCHMAKING: Player " << my_id << " requests mode: [" << requested_mode << "]" << std::endl;
 
-        // Check if already in queue
-        if (std::find(matchmaking_queue.begin(), matchmaking_queue.end(), my_id) != matchmaking_queue.end())
+        std::lock_guard<std::mutex> lock(session_mutex);
+        
+        // Debug: Print current queue state
+        std::cout << "DEBUG MATCHMAKING: Current queue (" << matchmaking_queue.size() << " players):" << std::endl;
+        for (const auto& entry : matchmaking_queue)
         {
-            return "{\"messageType\": \"MATCH_FIND_ACK\", \"responseCode\": 200, \"payload\": {\"status\": \"waiting\"}}";
+            std::cout << "  - Player " << entry.player_id << ", mode: [" << entry.mode << "]" << std::endl;
         }
 
-        // Add to queue
-        matchmaking_queue.push_back(my_id);
-        std::cout << "Player " << my_id << " joined matchmaking queue. Queue size: " << matchmaking_queue.size() << std::endl;
-
-        // Check if we have 2 players to match
-        if (matchmaking_queue.size() >= 2)
+        // Check if already in queue (by player_id) - update mode if different
+        bool already_in_queue = false;
+        for (auto& entry : matchmaking_queue)
         {
-            int player1_id = matchmaking_queue[0];
-            int player2_id = matchmaking_queue[1];
+            if (entry.player_id == my_id)
+            {
+                if (entry.mode == requested_mode)
+                {
+                    // Same mode, just waiting
+                    return "{\"messageType\": \"MATCH_FIND_ACK\", \"responseCode\": 200, \"payload\": {\"status\": \"waiting\"}}";
+                }
+                else
+                {
+                    // Different mode requested - update and continue to find new match
+                    std::cout << "Player " << my_id << " changed mode from [" << entry.mode << "] to [" << requested_mode << "]" << std::endl;
+                    entry.mode = requested_mode;
+                    already_in_queue = true;
+                    break;
+                }
+            }
+        }
 
-            // Remove from queue
-            matchmaking_queue.erase(matchmaking_queue.begin(), matchmaking_queue.begin() + 2);
+        // Add to queue with mode (if not already in queue)
+        if (!already_in_queue)
+        {
+            MatchmakingEntry my_entry;
+            my_entry.player_id = my_id;
+            my_entry.mode = requested_mode;
+            matchmaking_queue.push_back(my_entry);
+            std::cout << "Player " << my_id << " joined matchmaking queue with mode: " << requested_mode << ". Queue size: " << matchmaking_queue.size() << std::endl;
+        }
+
+        // Find a compatible opponent (same mode)
+        int match_idx = -1;
+        for (size_t i = 0; i < matchmaking_queue.size(); ++i)
+        {
+            // Skip self (we just added ourselves at the end)
+            if (matchmaking_queue[i].player_id == my_id) continue;
+            
+            // Check if modes match
+            if (matchmaking_queue[i].mode == requested_mode)
+            {
+                match_idx = static_cast<int>(i);
+                break;
+            }
+        }
+
+        // If found a compatible opponent
+        if (match_idx >= 0)
+        {
+            int player1_id = matchmaking_queue[match_idx].player_id;
+            int player2_id = my_id;
+            std::string mode = requested_mode;
+
+            // Remove both players from queue
+            // Remove player1 first (match_idx), then find and remove player2 (my_id)
+            matchmaking_queue.erase(matchmaking_queue.begin() + match_idx);
+            
+            // Now find and remove my_id (index might have shifted)
+            for (auto it = matchmaking_queue.begin(); it != matchmaking_queue.end(); ++it)
+            {
+                if (it->player_id == my_id)
+                {
+                    matchmaking_queue.erase(it);
+                    break;
+                }
+            }
 
             // Create game via Python
-            std::string mode = get_json_string(request, "mode");
-            // In random match, request has mode. But we have p1 and p2.
-            // Ideally we check compatibility. For now use Current Request's mode (which is player 2 aka my_id)
-            if (mode.empty())
-                mode = "RAPID";
-
             std::string create_req = "{\"action\": \"create_game\", \"white_id\": " + std::to_string(player1_id) +
                                      ", \"black_id\": " + std::to_string(player2_id) + ", \"mode\": \"" + mode + "\"}";
             std::string create_res = execute_logic_command(create_req);
@@ -351,8 +418,13 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
             if (game_id == 0)
             {
                 // Put players back in queue
-                matchmaking_queue.insert(matchmaking_queue.begin(), player2_id);
-                matchmaking_queue.insert(matchmaking_queue.begin(), player1_id);
+                MatchmakingEntry entry1, entry2;
+                entry1.player_id = player1_id;
+                entry1.mode = mode;
+                entry2.player_id = player2_id;
+                entry2.mode = mode;
+                matchmaking_queue.insert(matchmaking_queue.begin(), entry2);
+                matchmaking_queue.insert(matchmaking_queue.begin(), entry1);
                 return "{\"messageType\": \"ERROR\", \"responseCode\": 500, \"payload\": {\"reason\": \"Failed to create game\"}}";
             }
 
@@ -403,7 +475,7 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                 send(socket2, "\n", 1, 0);
             }
 
-            std::cout << "Match created! Game " << game_id << ": Player " << player1_id << " (white) vs Player " << player2_id << " (black)" << std::endl;
+            std::cout << "Match created! Game " << game_id << ": Player " << player1_id << " (white) vs Player " << player2_id << " (black) [Mode: " << mode << "]" << std::endl;
 
             // Return acknowledgment to the requesting client
             return "{\"messageType\": \"MATCH_START\", \"responseCode\": 200, \"payload\": {"
@@ -417,46 +489,8 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                    time_control + "\"}}";
         }
 
-        // Still waiting for opponent
-        return "{\"messageType\": \"MATCH_FIND_ACK\", \"responseCode\": 200, \"payload\": {\"status\": \"waiting\", \"message\": \"Waiting for opponent...\"}}";
-    }
-
-    // AUTH_LOGOUT_REQ - User logout
-    else if (type == Protocol::MessageType::AUTH_LOGOUT_REQ || action == "AUTH_LOGOUT_REQ" || type == "AUTH_LOGOUT_REQ")
-    {
-        int player_id = 0;
-        {
-            std::lock_guard<std::mutex> lock(session_mutex);
-            if (client_sessions.find(clientSocket) != client_sessions.end())
-            {
-                player_id = client_sessions[clientSocket];
-            }
-        }
-
-        if (player_id > 0)
-        {
-            std::cout << "Player " << player_id << " logging out" << std::endl;
-
-            // Remove from lobby
-            std::string leave_req = "{\"action\": \"leave_lobby\", \"player_id\": " + std::to_string(player_id) + "}";
-            execute_logic_command(leave_req);
-
-            // Remove from session and ready_players
-            {
-                std::lock_guard<std::mutex> lock(session_mutex);
-                client_sessions.erase(clientSocket);
-
-                auto it = std::remove(ready_players.begin(), ready_players.end(), player_id);
-                if (it != ready_players.end())
-                {
-                    ready_players.erase(it, ready_players.end());
-                }
-            }
-
-            std::cout << "Player " << player_id << " logged out successfully" << std::endl;
-        }
-
-        return "{\"messageType\": \"AUTH_LOGOUT_ACK\", \"responseCode\": 200, \"payload\": {\"status\": \"success\"}}";
+        // Still waiting for opponent with same mode
+        return "{\"messageType\": \"MATCH_FIND_ACK\", \"responseCode\": 200, \"payload\": {\"status\": \"waiting\", \"message\": \"Waiting for opponent with same game mode...\"}}";
     }
 
     // LOBBY_LIST - Get list of online players

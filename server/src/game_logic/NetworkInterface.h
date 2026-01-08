@@ -27,7 +27,13 @@ private:
     std::mutex session_mutex;
     std::map<SOCKET, int> client_sessions; // Socket -> PlayerID
     std::vector<int> ready_players; // Players in lobby
-    std::vector<int> matchmaking_queue; // Players waiting for random match
+    
+    // Matchmaking queue entry with player_id and selected game mode
+    struct MatchmakingEntry {
+        int player_id;
+        std::string mode; // BLITZ, RAPID, CLASSICAL
+    };
+    std::vector<MatchmakingEntry> matchmaking_queue; // Players waiting for random match
 
     // Helper for executing Python logic
     std::string execute_logic_command(const std::string& json_input);
