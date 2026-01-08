@@ -441,6 +441,38 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         return "{\"messageType\": \"LOBBY_LIST\", \"responseCode\": 200, \"payload\": {\"players\": []}}";
     }
 
+    // LEADERBOARD_REQ - Get top players by ELO
+    else if (type == "LEADERBOARD_REQ" || action == "LEADERBOARD_REQ")
+    {
+        std::string list_res = execute_logic_command("{\"action\": \"get_leaderboard\"}");
+        
+        // Extract leaderboard array
+        size_t lb_start = list_res.find("\"leaderboard\":");
+        if (lb_start != std::string::npos)
+        {
+            size_t arr_start = list_res.find("[", lb_start);
+            // Need to find matching closing bracket, simplified assuming no nested brackets in username
+            // Actually users might use nested brackets? No, valid JSON structure for list of objects.
+            // But simply finding ']' might be premature if username contains ']'.
+            // However logic_wrapper produces standard JSON.
+            // Let's rely on logic_wrapper output format which is usually compact or standard.
+            // Better: find the LAST ']' corresponding to the first '['.
+            // Since it's a flat list of dicts, it shouldn't be too nested, but just finding ANY ']' might stop early.
+            // But LOBBY_LIST uses find("]", arr_start), so I'll trust that for now or improve it.
+            // Actually, `execute_logic_command` returns the full JSON object string.
+            // The JSON from python is {"status": "success", "leaderboard": [...]}
+            // So finding "]" at the end should work.
+            size_t arr_end = list_res.find_last_of("]"); 
+            
+            if (arr_start != std::string::npos && arr_end != std::string::npos && arr_end > arr_start)
+            {
+                 std::string lb_arr = list_res.substr(arr_start, arr_end - arr_start + 1);
+                 return "{\"messageType\": \"LEADERBOARD\", \"responseCode\": 200, \"payload\": {\"leaderboard\": " + lb_arr + "}}";
+            }
+        }
+        return "{\"messageType\": \"LEADERBOARD\", \"responseCode\": 200, \"payload\": {\"leaderboard\": []}}";
+    }
+
     // Accept/Decline Challenge - Handle both old format and new CHALLENGE_RESP format
     else if (action == "accept_challenge" || type == "accept_challenge" ||
              type == "CHALLENGE_RESP" || action == "CHALLENGE_RESP")

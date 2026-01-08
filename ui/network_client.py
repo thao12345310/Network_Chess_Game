@@ -119,6 +119,9 @@ class ChessClient:
         
         lib.client_decline_rematch.argtypes = [ctypes.c_void_p]
         lib.client_decline_rematch.restype = ctypes.c_int
+
+        lib.client_request_leaderboard.argtypes = [ctypes.c_void_p]
+        lib.client_request_leaderboard.restype = ctypes.c_int
         
     def connect(self):
         """Connect to server"""
@@ -213,8 +216,12 @@ class ChessClient:
         """Handle player list from C++"""
         try:
             msg = json.loads(json_msg.decode('utf-8'))
-            if 'LOBBY_LIST' in self.callbacks:
+            msg_type = msg.get('messageType', '')
+            
+            if msg_type == 'LOBBY_LIST' and 'LOBBY_LIST' in self.callbacks:
                 self.callbacks['LOBBY_LIST'](msg)
+            elif msg_type == 'LEADERBOARD' and 'LEADERBOARD' in self.callbacks:
+                self.callbacks['LEADERBOARD'](msg.get('payload', {}))
         except Exception as e:
             print(f"Player list callback error: {e}")
     
@@ -369,8 +376,10 @@ class ChessClient:
         pass  # Server handles rejection if no accept is sent
     
     def get_leaderboard(self):
-        """Not implemented yet"""
-        pass
+        """Request leaderboard data"""
+        if not self.handle:
+            return False
+        return self.lib.client_request_leaderboard(self.handle) == 1
     
     def get_player_stats(self, username=None):
         """Not implemented yet"""

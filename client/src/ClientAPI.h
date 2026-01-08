@@ -37,6 +37,7 @@ void client_logout(ClientHandle handle);
 int client_request_player_list(ClientHandle handle);
 int client_join_lobby(ClientHandle handle, const char* mode);
 int client_find_match(ClientHandle handle);
+int client_request_leaderboard(ClientHandle handle);
 
 // Challenge operations
 int client_send_challenge(ClientHandle handle, const char* opponentUsername, const char* mode);

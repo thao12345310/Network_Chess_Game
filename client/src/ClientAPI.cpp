@@ -224,6 +224,14 @@ extern "C"
         return 1; // Stub - implement actual matchmaking
     }
 
+    int client_request_leaderboard(ClientHandle handle)
+    {
+        if (!handle)
+            return 0;
+        ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
+        return wrapper->client->requestLeaderboard() ? 1 : 0;
+    }
+
     int client_send_challenge(ClientHandle handle, const char *opponentUsername, const char *mode)
     {
         if (!handle || !opponentUsername)

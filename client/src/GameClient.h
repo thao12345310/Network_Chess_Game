@@ -65,6 +65,7 @@ public:
     
     // Match history
     bool requestMatchHistory();
+    bool requestLeaderboard();
     
     // Callbacks
     void setGameUpdateCallback(MessageCallback cb);

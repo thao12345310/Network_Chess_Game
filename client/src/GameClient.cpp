@@ -242,6 +242,15 @@ bool GameClient::requestMatchHistory()
     return netClient->sendMessage(msg);
 }
 
+bool GameClient::requestLeaderboard()
+{
+    Json::Value msg;
+    msg["messageType"] = "LEADERBOARD_REQ";
+    msg["payload"] = Json::Value(Json::objectValue);
+
+    return netClient->sendMessage(msg);
+}
+
 void GameClient::receiveLoop()
 {
     while (running)
@@ -306,7 +315,7 @@ void GameClient::processMessage(const Json::Value &msg)
             onGameUpdate(msg);
         }
     }
-    else if (type == "LOBBY_LIST")
+    else if (type == "LOBBY_LIST" || type == "LEADERBOARD")
     {
         if (onPlayerListUpdate)
         {
