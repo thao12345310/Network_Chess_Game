@@ -39,7 +39,7 @@ void StreamServer::start()
 
     sockaddr_in serverAddr{};
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
     serverAddr.sin_port = htons(port);
 
     if (bind(serverSocket, reinterpret_cast<sockaddr *>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR)
@@ -57,7 +57,7 @@ void StreamServer::start()
     }
 
     running = true;
-    std::cout << "Stream server listening on 127.0.0.1:" << port << std::endl;
+    std::cout << "Stream server listening on 0.0.0.0:" << port << std::endl;
 
     while (running)
     {
