@@ -183,15 +183,17 @@ class LoginScreen:
         self.client.port = port
         
         if self.client.connect():
-            self.status_indicator.config(fg='green')
+            self.status_indicator.config(fg='#27AE60')  # Green
             self.status_label.config(text="Connected")
-            self.connect_btn.config(state='disabled', bg='#95A5A6')
+            self.connect_btn.config(state='disabled', text="Connected", bg='#95A5A6')
             
             # C++ client handles message listening internally via callbacks
             # No need for separate Python listen thread
             
             messagebox.showinfo("Connected", "Connected to server successfully!")
         else:
+            self.status_indicator.config(fg='#E74C3C')  # Red
+            self.status_label.config(text="Disconnected")
             messagebox.showerror("Error", "Failed to connect to server")
     
     def do_login(self):
@@ -260,6 +262,19 @@ class LoginScreen:
     def show(self):
         """Show login screen"""
         self.frame.pack(fill='both', expand=True)
+        # Update connection status when showing screen
+        self.update_connection_status()
+    
+    def update_connection_status(self):
+        """Update connection status indicator"""
+        if self.client.connected:
+            self.status_indicator.config(fg='#27AE60')  # Green
+            self.status_label.config(text="Connected")
+            self.connect_btn.config(state='disabled', text="Connected")
+        else:
+            self.status_indicator.config(fg='#E74C3C')  # Red
+            self.status_label.config(text="Disconnected")
+            self.connect_btn.config(state='normal', text="Connect to Server")
     
     def hide(self):
         """Hide login screen"""

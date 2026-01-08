@@ -66,7 +66,8 @@ class ChessApp:
             self.client,
             self.player_elo,
             self.on_game_start,
-            self.show_leaderboard
+            self.show_leaderboard,
+            self.on_logout
         )
         
         # Leaderboard screen
@@ -128,6 +129,13 @@ class ChessApp:
         self.player_elo = new_elo
         self.screens['lobby'].player_elo = new_elo
         self.show_screen('lobby')
+    
+    def on_logout(self):
+        """Handle logout - return to login screen"""
+        # Reset client state
+        self.player_elo = 1200
+        # Show login screen
+        self.show_screen('login')
     
     def run(self):
         """Run the application"""

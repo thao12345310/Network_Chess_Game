@@ -24,6 +24,8 @@ namespace Protocol {
         constexpr const char* AUTH_REGISTER_ACK = "AUTH_REGISTER_ACK";
         constexpr const char* AUTH_LOGIN_REQ = "AUTH_LOGIN_REQ";
         constexpr const char* AUTH_LOGIN_ACK = "AUTH_LOGIN_ACK";
+        constexpr const char* AUTH_LOGOUT_REQ = "AUTH_LOGOUT_REQ";
+        constexpr const char* AUTH_LOGOUT_ACK = "AUTH_LOGOUT_ACK";
         
         // Lobby
         constexpr const char* LOBBY_LIST = "LOBBY_LIST";

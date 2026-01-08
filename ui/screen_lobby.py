@@ -12,12 +12,13 @@ from datetime import datetime
 class LobbyScreen:
     """Màn hình lobby - Tìm đối thủ và xử lý challenge"""
     
-    def __init__(self, root, client, player_elo, on_game_start, on_view_leaderboard):
+    def __init__(self, root, client, player_elo, on_game_start, on_view_leaderboard, on_logout=None):
         self.root = root
         self.client = client
         self.player_elo = player_elo
         self.on_game_start = on_game_start
         self.on_view_leaderboard = on_view_leaderboard
+        self.on_logout = on_logout
         
         self.players_data = []
         
@@ -273,7 +274,9 @@ class LobbyScreen:
         if result:
             self.client.logout()
             self.hide()
-            # Should trigger return to login screen
+            # Trigger return to login screen via callback
+            if self.on_logout:
+                self.on_logout()
     
     def on_player_list(self, msg):
         """Handle player list update"""

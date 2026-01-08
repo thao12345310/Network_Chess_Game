@@ -302,7 +302,13 @@ class ChessClient:
         return result == 1
     
     def logout(self):
-        """Logout"""
+        """Logout - send logout message then disconnect"""
+        if self.handle:
+            # Send logout message to server first
+            self.lib.client_logout(self.handle)
+            # Small delay to ensure message is sent
+            import time
+            time.sleep(0.1)
         self.disconnect()
         return True
     

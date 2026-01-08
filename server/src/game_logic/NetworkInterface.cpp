@@ -154,10 +154,11 @@ static double get_json_double(const std::string &json, const std::string &key)
     // Skip spaces
     while (val_start < json.length() && (json[val_start] == ' ' || json[val_start] == '\t'))
         val_start++;
-    
+
     // Check if we hit end or invalid char
-    if (val_start >= json.length()) return 600.0;
-    
+    if (val_start >= json.length())
+        return 600.0;
+
     // Parse double manually to avoid complex dependencies or just use atof
     return std::atof(json.c_str() + val_start);
 }
@@ -277,13 +278,15 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         {
             // Send CHALLENGE_NOTIFY to target player with proper format
             std::string mode = get_json_string(request, "mode");
-            if (mode.empty()) mode = "RAPID";
+            if (mode.empty())
+                mode = "RAPID";
 
             std::string msg = "{\"messageType\": \"CHALLENGE_NOTIFY\", \"responseCode\": 200, \"payload\": {"
                               "\"from_id\": " +
                               std::to_string(sender_id) + ", "
-                              "\"mode\": \"" + mode + "\", "
-                              "\"challenger_id\": " +
+                                                          "\"mode\": \"" +
+                              mode + "\", "
+                                     "\"challenger_id\": " +
                               std::to_string(sender_id) + "}}";
             send(targetSocket, msg.c_str(), static_cast<int>(msg.length()), 0);
             send(targetSocket, "\n", 1, 0);
@@ -334,10 +337,11 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
             matchmaking_queue.erase(matchmaking_queue.begin(), matchmaking_queue.begin() + 2);
 
             // Create game via Python
-            std::string mode = get_json_string(request, "mode"); 
-            // In random match, request has mode. But we have p1 and p2. 
+            std::string mode = get_json_string(request, "mode");
+            // In random match, request has mode. But we have p1 and p2.
             // Ideally we check compatibility. For now use Current Request's mode (which is player 2 aka my_id)
-            if (mode.empty()) mode = "RAPID";
+            if (mode.empty())
+                mode = "RAPID";
 
             std::string create_req = "{\"action\": \"create_game\", \"white_id\": " + std::to_string(player1_id) +
                                      ", \"black_id\": " + std::to_string(player2_id) + ", \"mode\": \"" + mode + "\"}";
@@ -364,8 +368,10 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
 
             // Determine time control string
             std::string time_control = "10+0";
-            if (mode == "BLITZ") time_control = "5+0";
-            else if (mode == "CLASSICAL") time_control = "30+0";
+            if (mode == "BLITZ")
+                time_control = "5+0";
+            else if (mode == "CLASSICAL")
+                time_control = "30+0";
 
             // Send MATCH_START to player1 (white)
             if (socket1 != INVALID_SOCKET)
@@ -376,7 +382,8 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                                                              "\"opponent_id\": " +
                                    std::to_string(player2_id) + ", "
                                                                 "\"your_color\": \"white\", "
-                                                                "\"time_control\": \"" + time_control + "\"}}";
+                                                                "\"time_control\": \"" +
+                                   time_control + "\"}}";
                 send(socket1, msg1.c_str(), static_cast<int>(msg1.length()), 0);
                 send(socket1, "\n", 1, 0);
             }
@@ -390,7 +397,8 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                                                              "\"opponent_id\": " +
                                    std::to_string(player1_id) + ", "
                                                                 "\"your_color\": \"black\", "
-                                                                "\"time_control\": \"" + time_control + "\"}}";
+                                                                "\"time_control\": \"" +
+                                   time_control + "\"}}";
                 send(socket2, msg2.c_str(), static_cast<int>(msg2.length()), 0);
                 send(socket2, "\n", 1, 0);
             }
@@ -405,11 +413,50 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                    std::to_string(my_id == player1_id ? player2_id : player1_id) + ", "
                                                                                    "\"your_color\": \"" +
                    std::string(my_id == player1_id ? "white" : "black") + "\", "
-                                                                          "\"time_control\": \"" + time_control + "\"}}";
+                                                                          "\"time_control\": \"" +
+                   time_control + "\"}}";
         }
 
         // Still waiting for opponent
         return "{\"messageType\": \"MATCH_FIND_ACK\", \"responseCode\": 200, \"payload\": {\"status\": \"waiting\", \"message\": \"Waiting for opponent...\"}}";
+    }
+
+    // AUTH_LOGOUT_REQ - User logout
+    else if (type == Protocol::MessageType::AUTH_LOGOUT_REQ || action == "AUTH_LOGOUT_REQ" || type == "AUTH_LOGOUT_REQ")
+    {
+        int player_id = 0;
+        {
+            std::lock_guard<std::mutex> lock(session_mutex);
+            if (client_sessions.find(clientSocket) != client_sessions.end())
+            {
+                player_id = client_sessions[clientSocket];
+            }
+        }
+
+        if (player_id > 0)
+        {
+            std::cout << "Player " << player_id << " logging out" << std::endl;
+
+            // Remove from lobby
+            std::string leave_req = "{\"action\": \"leave_lobby\", \"player_id\": " + std::to_string(player_id) + "}";
+            execute_logic_command(leave_req);
+
+            // Remove from session and ready_players
+            {
+                std::lock_guard<std::mutex> lock(session_mutex);
+                client_sessions.erase(clientSocket);
+
+                auto it = std::remove(ready_players.begin(), ready_players.end(), player_id);
+                if (it != ready_players.end())
+                {
+                    ready_players.erase(it, ready_players.end());
+                }
+            }
+
+            std::cout << "Player " << player_id << " logged out successfully" << std::endl;
+        }
+
+        return "{\"messageType\": \"AUTH_LOGOUT_ACK\", \"responseCode\": 200, \"payload\": {\"status\": \"success\"}}";
     }
 
     // LOBBY_LIST - Get list of online players
@@ -445,7 +492,7 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
     else if (type == "LEADERBOARD_REQ" || action == "LEADERBOARD_REQ")
     {
         std::string list_res = execute_logic_command("{\"action\": \"get_leaderboard\"}");
-        
+
         // Extract leaderboard array
         size_t lb_start = list_res.find("\"leaderboard\":");
         if (lb_start != std::string::npos)
@@ -462,12 +509,12 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
             // Actually, `execute_logic_command` returns the full JSON object string.
             // The JSON from python is {"status": "success", "leaderboard": [...]}
             // So finding "]" at the end should work.
-            size_t arr_end = list_res.find_last_of("]"); 
-            
+            size_t arr_end = list_res.find_last_of("]");
+
             if (arr_start != std::string::npos && arr_end != std::string::npos && arr_end > arr_start)
             {
-                 std::string lb_arr = list_res.substr(arr_start, arr_end - arr_start + 1);
-                 return "{\"messageType\": \"LEADERBOARD\", \"responseCode\": 200, \"payload\": {\"leaderboard\": " + lb_arr + "}}";
+                std::string lb_arr = list_res.substr(arr_start, arr_end - arr_start + 1);
+                return "{\"messageType\": \"LEADERBOARD\", \"responseCode\": 200, \"payload\": {\"leaderboard\": " + lb_arr + "}}";
             }
         }
         return "{\"messageType\": \"LEADERBOARD\", \"responseCode\": 200, \"payload\": {\"leaderboard\": []}}";
@@ -545,7 +592,8 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
 
         // Accept challenge - Create Game
         std::string mode = get_json_string(request, "mode");
-        if (mode.empty()) mode = "RAPID";
+        if (mode.empty())
+            mode = "RAPID";
 
         std::string create_req = "{\"action\": \"create_game\", \"white_id\": " + std::to_string(challenger_id) + ", \"black_id\": " + std::to_string(my_id) + ", \"mode\": \"" + mode + "\"}";
         std::cout << "DEBUG: Creating game with: " << create_req << std::endl;
@@ -562,8 +610,10 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
 
         // Determine time control string
         std::string time_control = "10+0";
-        if (mode == "BLITZ") time_control = "5+0";
-        else if (mode == "CLASSICAL") time_control = "30+0";
+        if (mode == "BLITZ")
+            time_control = "5+0";
+        else if (mode == "CLASSICAL")
+            time_control = "30+0";
 
         // Notify Challenger with MATCH_START
         std::lock_guard<std::mutex> lock(session_mutex);
@@ -585,7 +635,8 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                                                         "\"opponent_id\": " +
                               std::to_string(my_id) + ", "
                                                       "\"your_color\": \"white\", "
-                                                      "\"time_control\": \"" + time_control + "\"}}";
+                                                      "\"time_control\": \"" +
+                              time_control + "\"}}";
             send(challengerSocket, msg.c_str(), static_cast<int>(msg.length()), 0);
             send(challengerSocket, "\n", 1, 0);
         }
@@ -599,7 +650,8 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                                          "\"opponent_id\": " +
                std::to_string(challenger_id) + ", "
                                                "\"your_color\": \"black\", "
-                                               "\"time_control\": \"" + time_control + "\"}}";
+                                               "\"time_control\": \"" +
+               time_control + "\"}}";
     }
 
     // Decline Challenge
@@ -1265,30 +1317,39 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                     std::lock_guard<std::mutex> lock(session_mutex);
                     for (auto const &[sock, pid] : client_sessions)
                     {
-                         if (pid == white_id || pid == black_id) 
-                         {
-                             std::string result_str = "draw";
-                             std::string reason_str = (game_result == "checkmate") ? "checkmate" : "draw";
-                             int new_elo = 0;
+                        if (pid == white_id || pid == black_id)
+                        {
+                            std::string result_str = "draw";
+                            std::string reason_str = (game_result == "checkmate") ? "checkmate" : "draw";
+                            int new_elo = 0;
 
-                             if (pid == white_id) new_elo = new_white_elo;
-                             else new_elo = new_black_elo;
+                            if (pid == white_id)
+                                new_elo = new_white_elo;
+                            else
+                                new_elo = new_black_elo;
 
-                             if (game_result == "checkmate") {
-                                 if (pid == winner_id) result_str = "win";
-                                 else result_str = "loss";
-                             }
-                             
-                             std::string end_msg = "{\"messageType\": \"GAME_END\", \"responseCode\": 200, \"payload\": {"
-                                                   "\"game_id\": " + std::to_string(game_id) + ", "
-                                                   "\"result\": \"" + result_str + "\", "
-                                                   "\"reason\": \"" + reason_str + "\", "
-                                                   "\"new_elo\": " + std::to_string(new_elo) + "}}";
-                             
-                             send(sock, end_msg.c_str(), static_cast<int>(end_msg.length()), 0);
-                             send(sock, "\n", 1, 0);
-                             std::cout << "Sent GAME_END to player " << pid << std::endl;
-                         }
+                            if (game_result == "checkmate")
+                            {
+                                if (pid == winner_id)
+                                    result_str = "win";
+                                else
+                                    result_str = "loss";
+                            }
+
+                            std::string end_msg = "{\"messageType\": \"GAME_END\", \"responseCode\": 200, \"payload\": {"
+                                                  "\"game_id\": " +
+                                                  std::to_string(game_id) + ", "
+                                                                            "\"result\": \"" +
+                                                  result_str + "\", "
+                                                               "\"reason\": \"" +
+                                                  reason_str + "\", "
+                                                               "\"new_elo\": " +
+                                                  std::to_string(new_elo) + "}}";
+
+                            send(sock, end_msg.c_str(), static_cast<int>(end_msg.length()), 0);
+                            send(sock, "\n", 1, 0);
+                            std::cout << "Sent GAME_END to player " << pid << std::endl;
+                        }
                     }
                 }
             }
