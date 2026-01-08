@@ -42,15 +42,6 @@ class LobbyScreen:
         # Player info
         info_frame = tk.Frame(top_bar, bg='#2C3E50')
         info_frame.pack(side='right', padx=20)
-        
-        tk.Label(info_frame, text=f"👤 {self.client.username}", 
-                font=("Arial", 12), 
-                fg='#ECF0F1', bg='#2C3E50').pack(side='left', padx=10)
-        
-        tk.Label(info_frame, text=f"⭐ ELO: {self.player_elo}", 
-                font=("Arial", 12, "bold"), 
-                fg='#F39C12', bg='#2C3E50').pack(side='left', padx=10)
-        
         self.logout_btn = tk.Button(info_frame, text="Logout", 
                                     command=self.do_logout,
                                     bg='#E74C3C', fg='white', 
@@ -125,27 +116,6 @@ class LobbyScreen:
                                      relief='flat', cursor='hand2',
                                      width=20)
         self.refresh_btn.pack(pady=10, padx=20, ipady=10)
-        
-        ttk.Separator(left_panel, orient='horizontal').pack(fill='x', 
-                                                            pady=20, padx=20)
-        
-        # Stats
-        stats_frame = tk.Frame(left_panel, bg='white')
-        stats_frame.pack(pady=10, padx=20)
-        
-        tk.Label(stats_frame, text="Your Stats", 
-                font=("Arial", 11, "bold"), 
-                fg='#2C3E50', bg='white').pack()
-        
-        self.stats_text = tk.Text(stats_frame, width=22, height=5, 
-                                 font=("Arial", 9),
-                                 relief='flat', bg='#ECF0F1')
-        self.stats_text.pack(pady=10)
-        self.stats_text.insert('end', f"Username: {self.client.username}\n")
-        self.stats_text.insert('end', f"ELO: {self.player_elo}\n")
-        self.stats_text.insert('end', f"Wins: 0\n")
-        self.stats_text.insert('end', f"Losses: 0\n")
-        self.stats_text.config(state='disabled')
         
         # Center panel - Players list
         center_panel = tk.Frame(content, bg='white', relief='solid', bd=1)
