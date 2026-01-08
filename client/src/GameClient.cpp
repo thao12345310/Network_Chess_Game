@@ -86,25 +86,26 @@ bool GameClient::requestPlayerList()
     return netClient->sendMessage(msg);
 }
 
-bool GameClient::joinLobby()
+bool GameClient::joinLobby(const std::string &mode)
 {
     Json::Value msg;
     msg["messageType"] = "MATCH_FIND_REQ";
-    msg["payload"]["mode"] = "random";
+    msg["payload"]["mode"] = mode;
 
     return netClient->sendMessage(msg);
 }
 
-bool GameClient::sendChallenge(const std::string &opponentUsername)
+bool GameClient::sendChallenge(const std::string &opponentUsername, const std::string &mode)
 {
     Json::Value msg;
     msg["messageType"] = "CHALLENGE_REQ";
     msg["payload"]["opponent_username"] = opponentUsername;
+    msg["payload"]["mode"] = mode;
 
     return netClient->sendMessage(msg);
 }
 
-bool GameClient::acceptChallenge(const std::string &challengeId)
+bool GameClient::acceptChallenge(const std::string &challengeId, const std::string &mode)
 {
     Json::Value msg;
     msg["messageType"] = "CHALLENGE_RESP";
@@ -120,6 +121,7 @@ bool GameClient::acceptChallenge(const std::string &challengeId)
         msg["payload"]["challenger_id"] = challengeId;
     }
     msg["payload"]["accepted"] = true;
+    msg["payload"]["mode"] = mode;
 
     return netClient->sendMessage(msg);
 }

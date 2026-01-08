@@ -207,12 +207,13 @@ extern "C"
         return wrapper->client->requestPlayerList() ? 1 : 0;
     }
 
-    int client_join_lobby(ClientHandle handle)
+    int client_join_lobby(ClientHandle handle, const char *mode)
     {
         if (!handle)
             return 0;
         ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
-        return wrapper->client->joinLobby() ? 1 : 0;
+        std::string modeStr = mode ? mode : "RAPID";
+        return wrapper->client->joinLobby(modeStr) ? 1 : 0;
     }
 
     int client_find_match(ClientHandle handle)
@@ -223,20 +224,22 @@ extern "C"
         return 1; // Stub - implement actual matchmaking
     }
 
-    int client_send_challenge(ClientHandle handle, const char *opponentUsername)
+    int client_send_challenge(ClientHandle handle, const char *opponentUsername, const char *mode)
     {
         if (!handle || !opponentUsername)
             return 0;
         ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
-        return wrapper->client->sendChallenge(opponentUsername) ? 1 : 0;
+        std::string modeStr = mode ? mode : "RAPID";
+        return wrapper->client->sendChallenge(opponentUsername, modeStr) ? 1 : 0;
     }
 
-    int client_accept_challenge(ClientHandle handle, const char *challengerId)
+    int client_accept_challenge(ClientHandle handle, const char *challengerId, const char *mode)
     {
         if (!handle || !challengerId)
             return 0;
         ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
-        return wrapper->client->acceptChallenge(challengerId) ? 1 : 0;
+        std::string modeStr = mode ? mode : "RAPID";
+        return wrapper->client->acceptChallenge(challengerId, modeStr) ? 1 : 0;
     }
 
     int client_send_move(ClientHandle handle, const char *fromPos, const char *toPos)

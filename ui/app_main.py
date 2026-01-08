@@ -111,14 +111,15 @@ class ChessApp:
         """Show leaderboard screen"""
         self.show_screen('leaderboard')
     
-    def on_game_start(self, game_id, opponent, your_color, opponent_elo):
+    def on_game_start(self, game_id, opponent, your_color, opponent_elo, time_control="10+0"):
         """Handle game start"""
         self.screens['game'].start_game(
             game_id, 
             opponent, 
             your_color, 
             opponent_elo, 
-            self.player_elo
+            self.player_elo,
+            time_control
         )
         self.show_screen('game')
     

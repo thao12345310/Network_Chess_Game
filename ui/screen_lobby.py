@@ -271,8 +271,8 @@ class LobbyScreen:
         opponent = selected_text.split()[0].strip()
         mode = self.game_mode.get()
         
-        # TODO: Pass mode to challenge request
-        self.client.send_challenge(opponent)
+        # Pass mode to challenge request
+        self.client.send_challenge(opponent, mode)
         self.log(f"Challenge sent to {opponent} (Mode: {mode})")
         
         mode_names = {"BLITZ": "5 min", "RAPID": "10 min", "CLASSICAL": "30 min"}
@@ -284,8 +284,8 @@ class LobbyScreen:
     def do_random_match(self):
         """Find random opponent"""
         mode = self.game_mode.get()
-        # TODO: Pass mode to matchmaking request
-        self.client.random_match()
+        # Pass mode to matchmaking request
+        self.client.random_match(mode)
         self.log(f"Searching for random opponent (Mode: {mode})...")
         
         mode_names = {"BLITZ": "5 min", "RAPID": "10 min", "CLASSICAL": "30 min"}
@@ -329,6 +329,7 @@ class LobbyScreen:
         opponent_id = payload.get('opponent_id')
         your_color = payload.get('your_color', 'white')
         opponent_elo = payload.get('opponent_elo', 1200)
+        time_control = payload.get('time_control', '10+0')
         
         # Look up opponent username from players_data
         opponent = f"Player {opponent_id}"
@@ -339,9 +340,9 @@ class LobbyScreen:
                 break
         
         self.log(f"Game starting vs {opponent}!")
-        print(f"DEBUG: Starting game - ID: {game_id}, opponent: {opponent}, color: {your_color}")
+        print(f"DEBUG: Starting game - ID: {game_id}, opponent: {opponent}, color: {your_color}, TC: {time_control}")
         self.hide()
-        self.on_game_start(game_id, opponent, your_color, opponent_elo)
+        self.on_game_start(game_id, opponent, your_color, opponent_elo, time_control)
     
     def on_challenge_received(self, msg):
         """Handle incoming challenge from another player"""
@@ -357,17 +358,19 @@ class LobbyScreen:
         
         self.log(f"Challenge received from {challenger_name}!")
         
+        mode = payload.get('mode', 'RAPID')
+        
         # Show accept/decline dialog
         result = messagebox.askyesno(
             "Challenge Received!",
-            f"⚔️ {challenger_name} wants to play chess with you!\n\nDo you accept the challenge?",
+            f"⚔️ {challenger_name} wants to play chess with you!\nMode: {mode}\n\nDo you accept the challenge?",
             icon='question'
         )
         
         if result:
             # Accept challenge
-            self.client.accept_challenge(str(challenger_id))
-            self.log(f"Accepted challenge from {challenger_name}")
+            self.client.accept_challenge(str(challenger_id), mode)
+            self.log(f"Accepted challenge from {challenger_name} ({mode})")
         else:
             # Decline - just don't respond (or send decline)
             self.log(f"Declined challenge from {challenger_name}")

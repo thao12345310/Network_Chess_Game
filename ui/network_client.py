@@ -100,11 +100,15 @@ class ChessClient:
         lib.client_decline_draw.restype = ctypes.c_int
         
         # Challenge functions
-        lib.client_send_challenge.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.client_send_challenge.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
         lib.client_send_challenge.restype = ctypes.c_int
         
-        lib.client_accept_challenge.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.client_accept_challenge.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
         lib.client_accept_challenge.restype = ctypes.c_int
+
+        # Lobby functions
+        lib.client_join_lobby.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.client_join_lobby.restype = ctypes.c_int
         
         # Rematch functions
         lib.client_request_rematch.argtypes = [ctypes.c_void_p]
@@ -282,13 +286,12 @@ class ChessClient:
         )
         return result == 1
     
-    def random_match(self):
+    def random_match(self, mode="RAPID"):
         """Find random match"""
-        # TODO: Implement in C++ client
         if not self.handle:
             return False
-        # For now, call join_lobby
-        result = self.lib.client_join_lobby(self.handle)
+        # Call with mode
+        result = self.lib.client_join_lobby(self.handle, mode.encode('utf-8'))
         return result == 1
     
     def logout(self):
@@ -339,23 +342,25 @@ class ChessClient:
         return self.lib.client_decline_rematch(self.handle) == 1
     
     # Challenge methods
-    def send_challenge(self, opponent):
+    def send_challenge(self, opponent, mode="RAPID"):
         """Send challenge to specific player"""
         if not self.handle:
             return False
         result = self.lib.client_send_challenge(
             self.handle,
-            opponent.encode('utf-8')
+            opponent.encode('utf-8'),
+            mode.encode('utf-8')
         )
         return result == 1
     
-    def accept_challenge(self, challenger_id):
+    def accept_challenge(self, challenger_id, mode="RAPID"):
         """Accept challenge from a player"""
         if not self.handle:
             return False
         result = self.lib.client_accept_challenge(
             self.handle,
-            str(challenger_id).encode('utf-8')
+            str(challenger_id).encode('utf-8'),
+            mode.encode('utf-8')
         )
         return result == 1
     
