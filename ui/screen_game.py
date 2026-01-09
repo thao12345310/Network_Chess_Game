@@ -20,9 +20,13 @@ class GameScreen:
         # Game state
         self.game_id = None
         self.opponent_name = None
-        self.opponent_elo = None
-        self.player_color = None
         self.player_elo = None
+        self.time_control_seconds = None
+        self.last_move_time = None
+        self.white_time_left = None
+        self.black_time_left = None
+        self.is_game_active = False
+        self.last_claim_time = 0
         
         # Store original MATCH_START callback from Lobby (to restore later)
         self.lobby_match_start_callback = None
@@ -250,12 +254,24 @@ class GameScreen:
         # Parse time control (format "10+0" -> 10 mins)
         try:
             minutes = int(time_control.split('+')[0])
+            self.time_control_seconds = minutes * 60.0
             time_str = f"{minutes:02d}:00"
         except:
+            self.time_control_seconds = 600.0
             time_str = "10:00"
             
+        self.white_time_left = self.time_control_seconds
+        self.black_time_left = self.time_control_seconds
+        self.last_move_time = None # Timer starts on first move usually, or game start? 
+        # Server logic usually starts timer on game creation or first move. 
+        # Let's assume game start for simplicity or sync with server.
+        # Actually logic_wrapper uses 'last_move_time' from DB.
+        
         self.player_time_label.config(text=time_str)
         self.opponent_time_label.config(text=time_str)
+        
+        self.is_game_active = True
+        self.check_timeout() # Start background checker
         
         color_emoji = "⚪ White" if your_color == 'white' else "⚫ Black"
         self.color_label.config(text=color_emoji)
@@ -266,6 +282,10 @@ class GameScreen:
         # Reset board
         self.chess_board.reset()
         self.chess_board.draw()
+        
+        # Start timer immediately
+        import time
+        self.last_move_time = time.time()
         
         # Set initial turn label
         # Standard chess: White always moves first
@@ -522,6 +542,91 @@ class GameScreen:
             else:
                 self.player_time_label.config(text=b_str)
                 self.opponent_time_label.config(text=w_str)
+                
+            # Update internal state
+            self.white_time_left = float(white_time)
+            self.black_time_left = float(black_time)
+            # Reset local timer reference
+            import time
+            self.last_move_time = time.time()
+            
+    def check_timeout(self):
+        """Check if anyone has timed out"""
+        if not self.is_game_active:
+            return
+            
+        if self.last_move_time is None:
+             # Timer hasn't started yet (waiting for first move)
+             # Or we can just start it now if we want strict start?
+             # logic_wrapper says: if last_move_ts_str is None, it's first move, no deduct.
+             # So we wait for first move update.
+             self.root.after(1000, self.check_timeout)
+             return
+        
+        import time
+        now = time.time()
+        elapsed = now - self.last_move_time
+        
+        # Determine current turn
+        fen = self.chess_board.current_fen
+        is_white_turn = True
+        if fen:
+            parts = fen.split()
+            if len(parts) > 1 and parts[1] == 'b':
+                is_white_turn = False
+        
+        # Calculate projected time left
+        if is_white_turn:
+            current_white = self.white_time_left - elapsed
+            current_black = self.black_time_left
+            
+            if current_white <= 0:
+                current_white = 0
+                # White timed out. 
+                # If I am BLACK, I should claim.
+                if self.player_color == 'black':
+                    if now - self.last_claim_time > 3.0:
+                        print("DEBUG: reclaiming timeout on White")
+                        self.client.make_move(self.game_id, "CLAIM", "TIMEOUT")
+                        self.last_claim_time = now
+        else:
+            current_white = self.white_time_left
+            current_black = self.black_time_left - elapsed
+            
+            if current_black <= 0:
+                current_black = 0
+                # Black timed out.
+                # If I am WHITE, I should claim.
+                if self.player_color == 'white':
+                    if now - self.last_claim_time > 3.0:
+                        print("DEBUG: reclaiming timeout on Black")
+                        self.client.make_move(self.game_id, "CLAIM", "TIMEOUT")
+                        self.last_claim_time = now
+        
+        # Update UI Labels (optional, user said no countdown tick, but showing 00:00 is nice)
+        # Actually user said "forget countdown tick", maybe just keep static or update every 1s?
+        # Let's simple update labels to show passage of time roughly
+        def format_time(seconds):
+             m = int(max(0, seconds) // 60)
+             s = int(max(0, seconds) % 60)
+             return f"{m:02d}:{s:02d}"
+             
+        if is_white_turn:
+             w_str = format_time(current_white)
+             # Only update the active one to avoid jitter
+             if self.player_color == 'white':
+                 self.player_time_label.config(text=w_str)
+             else:
+                 self.opponent_time_label.config(text=w_str)
+        else:
+             b_str = format_time(current_black)
+             if self.player_color == 'black':
+                 self.player_time_label.config(text=b_str)
+             else:
+                 self.opponent_time_label.config(text=b_str)
+
+        # Re-schedule
+        self.root.after(1000, self.check_timeout)
     
     def on_emoji_update(self, msg):
         """Handle emoji/chat update from opponent"""
@@ -537,6 +642,8 @@ class GameScreen:
         result = payload.get('result', 'unknown')  # "win", "loss", "draw"
         reason = payload.get('reason', 'Game ended')
         new_elo = payload.get('new_elo', self.player_elo)
+        
+        self.is_game_active = False # Stop timer checker
         
         # Calculate ELO change
         elo_change = new_elo - self.player_elo if self.player_elo else 0
@@ -609,8 +716,15 @@ class GameScreen:
         white_id = payload.get('white_id')
         black_id = payload.get('black_id')
         mode = payload.get('mode', 'RAPID')
+        time_control = payload.get('time_control')
         
-        print(f"DEBUG: REMATCH MATCH_START - Game {game_id}, white={white_id}, black={black_id}")
+        # Fallback if time_control missing in payload
+        if not time_control:
+             if mode == 'BLITZ': time_control = "5+0"
+             elif mode == 'CLASSICAL': time_control = "30+0"
+             else: time_control = "10+0"
+        
+        print(f"DEBUG: REMATCH MATCH_START - Game {game_id}, white={white_id}, black={black_id}, TC={time_control}")
         
         # For rematch, swap colors from previous game
         if hasattr(self, 'player_color') and self.player_color:
@@ -627,7 +741,8 @@ class GameScreen:
             opponent=self.opponent_name if hasattr(self, 'opponent_name') else "Opponent",
             your_color=new_color,
             opponent_elo=self.opponent_elo if hasattr(self, 'opponent_elo') else 1200,
-            player_elo=self.player_elo if hasattr(self, 'player_elo') else 1200
+            player_elo=self.player_elo if hasattr(self, 'player_elo') else 1200,
+            time_control=time_control
         )
     
     def on_draw_offer_received(self, msg):
