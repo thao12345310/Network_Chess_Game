@@ -1,5 +1,5 @@
 {
-  "board_theme": "dark",
+  "board_theme": "classic",
   "piece_style": "elegant",
   "show_coordinates": true,
   "show_legal_moves": true,

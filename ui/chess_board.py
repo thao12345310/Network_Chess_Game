@@ -89,6 +89,33 @@ class ChessBoard:
         self.current_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
         self.is_flipped = False
     
+    def load_fen(self, fen):
+        """Load board from FEN string"""
+        if not HAS_CHESS:
+            print("WARNING: Cannot load FEN without python-chess library")
+            return False
+        
+        try:
+            board_obj = chess.Board(fen)
+            self.current_fen = fen
+            
+            # Convert chess.Board to internal board representation
+            self.board = [[' ' for _ in range(8)] for _ in range(8)]
+            
+            for square in chess.SQUARES:
+                piece = board_obj.piece_at(square)
+                if piece:
+                    row = 7 - chess.square_rank(square)  # chess library: rank 0 = bottom
+                    col = chess.square_file(square)
+                    self.board[row][col] = piece.symbol()
+            
+            self.selected_square = None
+            self.highlighted_squares = []
+            return True
+        except Exception as e:
+            print(f"ERROR loading FEN: {e}")
+            return False
+    
     def draw(self):
         """Draw chess board on canvas"""
         self.canvas.delete("all")

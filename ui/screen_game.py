@@ -24,6 +24,7 @@ class GameScreen:
         self.opponent_elo = None
         self.player_color = None
         self.player_elo = None
+        self.is_practice_mode = False  # Practice mode flag
         
         # Store original MATCH_START callback from Lobby (to restore later)
         self.lobby_match_start_callback = None
@@ -162,26 +163,31 @@ class GameScreen:
         control_frame = tk.Frame(board_container, bg='#ECF0F1')
         control_frame.pack(pady=15)
         
-        tk.Button(control_frame, text="🏳️ Resign", 
+        # Store button references to hide/show based on game mode
+        self.resign_btn = tk.Button(control_frame, text="🏳️ Resign", 
                  command=self.do_resign,
                  bg='#E74C3C', fg='white', 
                  font=("Arial", 11, "bold"),
                  relief='flat', cursor='hand2',
-                 width=12).pack(side='left', padx=5, ipady=8)
+                 width=12)
+        self.resign_btn.pack(side='left', padx=5, ipady=8)
         
-        tk.Button(control_frame, text="🤝 Offer Draw", 
+        self.draw_btn = tk.Button(control_frame, text="🤝 Offer Draw", 
                  command=self.offer_draw,
                  bg='#F39C12', fg='white', 
                  font=("Arial", 11, "bold"),
                  relief='flat', cursor='hand2',
-                 width=12).pack(side='left', padx=5, ipady=8)
+                 width=12)
+        self.draw_btn.pack(side='left', padx=5, ipady=8)
         
-        tk.Button(control_frame, text="💬 Chat", 
-                 command=self.open_chat,
-                 bg='#3498DB', fg='white', 
+        # Back button for practice mode
+        self.back_btn = tk.Button(control_frame, text="← Back to Lobby", 
+                 command=self.return_to_lobby,
+                 bg='#95A5A6', fg='white', 
                  font=("Arial", 11, "bold"),
                  relief='flat', cursor='hand2',
-                 width=12).pack(side='left', padx=5, ipady=8)
+                 width=15)
+        # Will be shown/hidden based on game mode
         
         # Right panel - captured pieces and info
         right_panel = tk.Frame(game_area, bg='white', width=250, relief='solid', bd=1)
@@ -227,14 +233,18 @@ class GameScreen:
         # NOTE: DO NOT register MATCH_START here - it will override Lobby's callback
         # MATCH_START for rematch is registered dynamically when needed
     
-    def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo, time_control="10+0", is_rematch=False):
+    def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo, time_control="10+0", is_rematch=False, custom_fen=None):
         """Initialize game with data"""
-        print(f"DEBUG: start_game called. Game: {game_id}, Me: {self.client.username}, Color: '{your_color}', TC: {time_control}, Rematch: {is_rematch}")
+        print(f"DEBUG: start_game called. Game: {game_id}, Me: {self.client.username}, Color: '{your_color}', TC: {time_control}, Rematch: {is_rematch}, Custom FEN: {custom_fen}")
         self.game_id = game_id
         self.opponent_name = opponent
         self.player_color = your_color
         self.opponent_elo = opponent_elo
         self.player_elo = player_elo
+        
+        # Practice mode: game_id is None and opponent is "Practice Mode"
+        self.is_practice_mode = (game_id is None and opponent == "Practice Mode")
+        print(f"DEBUG: Practice mode: {self.is_practice_mode}")
         
         # Only register MATCH_START callback on first game start (not rematch)
         if not is_rematch:
@@ -272,14 +282,31 @@ class GameScreen:
         self.game_title.config(text=f"Game vs {opponent}")
         
         
-        # Reset board
-        self.chess_board.reset()
+        # Reset board or load custom FEN
+        if custom_fen:
+            # Load custom position from FEN
+            self.chess_board.load_fen(custom_fen)
+            print(f"DEBUG: Loaded custom FEN: {custom_fen}")
+        else:
+            # Standard starting position
+            self.chess_board.reset()
+        
         self.chess_board.draw()
         
-        # Set initial turn label
-        # Standard chess: White always moves first
-        is_white_turn = True 
-        is_your_turn = (self.player_color == 'white')
+        # Set initial turn label based on FEN (if custom) or standard
+        if custom_fen:
+            # Parse FEN to determine whose turn it is
+            fen_parts = custom_fen.split()
+            if len(fen_parts) >= 2:
+                turn_char = fen_parts[1]  # 'w' or 'b'
+                is_your_turn = (turn_char == 'w' and self.player_color == 'white') or \
+                               (turn_char == 'b' and self.player_color == 'black')
+            else:
+                is_your_turn = (self.player_color == 'white')
+        else:
+            # Standard chess: White always moves first
+            is_your_turn = (self.player_color == 'white')
+        
         print(f"DEBUG: Initial turn check. Me: {self.player_color}. My turn? {is_your_turn}")
         
         if is_your_turn:
@@ -295,6 +322,20 @@ class GameScreen:
         self.moves_text.config(state='normal')
         self.moves_text.delete('1.0', 'end')
         self.moves_text.config(state='disabled')
+        
+        # Hide/show buttons based on game mode
+        if self.is_practice_mode:
+            # Hide online-only buttons in practice mode
+            self.resign_btn.pack_forget()
+            self.draw_btn.pack_forget()
+            # Show back button for practice mode
+            self.back_btn.pack(side='left', padx=5, ipady=8)
+        else:
+            # Show buttons in online mode
+            self.resign_btn.pack(side='left', padx=5, ipady=8)
+            self.draw_btn.pack(side='left', padx=5, ipady=8)
+            # Hide back button in online mode
+            self.back_btn.pack_forget()
         
         self.update_turn_label()
 
@@ -327,13 +368,18 @@ class GameScreen:
         print(f"DEBUG: Click at {row},{col}. Piece: '{piece}'")
         
         if self.chess_board.selected_square is None:
-            # Select piece - but only if it's the player's piece
+            # Select piece - but only if it's the player's piece (or in practice mode)
             if piece and piece != ' ':
                 # Check if this is the player's piece
                 is_white_piece = piece.isupper()
                 is_player_white = self.player_color == 'white'
                 
-                if (is_white_piece and is_player_white) or (not is_white_piece and not is_player_white):
+                # In practice mode, allow moving both colors
+                can_select = self.is_practice_mode or \
+                             (is_white_piece and is_player_white) or \
+                             (not is_white_piece and not is_player_white)
+                
+                if can_select:
                     self.chess_board.selected_square = (row, col)
                     # Get and highlight valid moves
                     valid_moves = self.chess_board.get_valid_moves(row, col)
@@ -403,20 +449,43 @@ class GameScreen:
                 if promotion:
                     to_pos += promotion
 
-                # Send to server
-                if self.client.connected and self.game_id:
+                # In practice mode, just update local board
+                if self.is_practice_mode:
+                    # Make move locally
+                    self.chess_board.make_move(from_row, from_col, row, col)
+                    self.chess_board.clear_selection()
+                    self.chess_board.draw()
+                    
+                    # Add to move history
+                    self.add_move(from_pos, to_pos)
+                    
+                    # Update turn label
+                    self.update_turn_label()
+                    
+                    print(f"DEBUG: Practice mode move: {from_pos} -> {to_pos}")
+                # Normal online mode
+                elif self.client.connected and self.game_id:
                     self.client.make_move(self.game_id, from_pos, to_pos)
                 
-                # Clear selection immediately to prevent double submissions
-                self.chess_board.clear_selection()
-                self.chess_board.draw()
+                    # Clear selection immediately to prevent double submissions
+                    self.chess_board.clear_selection()
+                    self.chess_board.draw()
+                else:
+                    print("DEBUG: Cannot make move - not connected or no game_id")
+                    self.chess_board.clear_selection()
+                    self.chess_board.draw()
             else:
                 # Clicking on another piece of the same color - select it instead
                 if piece and piece != ' ':
                     is_white_piece = piece.isupper()
                     is_player_white = self.player_color == 'white'
                     
-                    if (is_white_piece and is_player_white) or (not is_white_piece and not is_player_white):
+                    # In practice mode, allow selecting any piece
+                    can_select = self.is_practice_mode or \
+                                 (is_white_piece and is_player_white) or \
+                                 (not is_white_piece and not is_player_white)
+                    
+                    if can_select:
                         self.chess_board.selected_square = (row, col)
                         valid_moves = self.chess_board.get_valid_moves(row, col)
                         self.chess_board.highlighted_squares = valid_moves
@@ -447,6 +516,14 @@ class GameScreen:
         """Offer draw"""
         self.client.offer_draw(self.game_id)
         messagebox.showinfo("Draw Offer", "Draw offer sent to opponent")
+    
+    def return_to_lobby(self):
+        """Return to lobby from practice mode"""
+        result = messagebox.askyesno("Exit Practice Mode", 
+                                     "Do you want to exit practice mode and return to lobby?")
+        if result:
+            self.hide()
+            self.on_game_end(self.player_elo)
     
     def open_chat(self):
         """Open chat (placeholder)"""

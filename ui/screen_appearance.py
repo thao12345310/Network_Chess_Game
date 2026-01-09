@@ -55,7 +55,7 @@ class AppearanceScreen:
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.canvas.yview)
         
-        # Settings container inside canvas
+        # Settings container inside canvas - 2 column layout
         settings_frame = tk.Frame(self.canvas, bg="#2C3E50", padx=30, pady=20)
         canvas_window = self.canvas.create_window((0, 0), window=settings_frame, anchor=tk.NW)
         
@@ -75,20 +75,29 @@ class AppearanceScreen:
         
         self.canvas.bind_all("<MouseWheel>", on_mousewheel)
         
+        # Create 2 columns
+        left_column = tk.Frame(settings_frame, bg="#2C3E50")
+        left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        right_column = tk.Frame(settings_frame, bg="#2C3E50")
+        right_column.pack(side=tk.LEFT, fill=tk.Y, padx=(10, 0))
+        
+        # Left column - Settings
         # Board Theme Section
-        self.create_theme_section(settings_frame)
+        self.create_theme_section(left_column)
         
         # Piece Style Section
-        self.create_piece_style_section(settings_frame)
+        self.create_piece_style_section(left_column)
         
         # Display Options Section
-        self.create_display_options(settings_frame)
+        self.create_display_options(left_column)
         
+        # Right column - Preview
         # Preview Section
-        self.create_preview_section(settings_frame)
+        self.create_preview_section(right_column)
         
-        # Buttons
-        self.create_buttons(settings_frame)
+        # Buttons at bottom of left column
+        self.create_buttons(left_column)
     
     def create_theme_section(self, parent):
         """Tạo section chọn board theme"""
