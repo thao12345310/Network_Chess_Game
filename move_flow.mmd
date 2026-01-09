@@ -1,0 +1,72 @@
+sequenceDiagram
+    autonumber
+    
+    box "Client Side"
+        participant User as User (Player)
+        participant UI as Client UI (Python)
+        participant ClientLib as C++ Client Lib
+    end
+    
+    box "Server Infrastructure"
+        participant Server as C++ Server (NetworkInterface)
+        participant Logic as Server Logic (Wrapper)
+    end
+    
+    box "Core Logic & Data"
+        participant Chess as Game Rules (Python-chess)
+        participant DB as Database (SQLite)
+    end
+
+    note right of User: Phase 1: Interaction
+    User->>UI: Click Piece (Square Click 1)
+    activate UI
+    UI->>Chess: Check local valid moves (Highlight)
+    UI-->>User: Highlight Squares
+    deactivate UI
+    
+    User->>UI: Click Destination (Square Click 2)
+    activate UI
+
+    note right of UI: Phase 2: Transmission
+    UI->>ClientLib: make_move(game_id, from, to)
+    activate ClientLib
+    ClientLib->>Server: Send JSON "MOVE" (via Socket)
+    activate Server
+
+    note right of Server: Phase 3: Processing
+    Server->>Logic: Call logic_wrapper.main(JSON)
+    activate Logic
+    Logic->>DB: get_game_info (Check Turn, Time)
+    
+    Logic->>Chess: validate_move(current_fen, move_uci)
+    activate Chess
+    Chess-->>Logic: Returns (is_valid, next_fen)
+    deactivate Chess
+
+    alt Move Invalid
+        Logic-->>Server: JSON {status: error}
+        Server-->>ClientLib: MOVE_ACK (Error)
+        ClientLib-->>UI: Callback on_move_response (Error)
+        UI->>User: Show Error, Revert Board
+    else Move Valid
+        note right of Logic: Phase 4: Update & Broadcast
+        Logic->>DB: insert_move(), update_game_fen()
+        Logic->>Chess: determine_result() (Checkmate?)
+        activate Chess
+        Chess-->>Logic: Result
+        deactivate Chess
+        
+        Logic-->>Server: JSON {status: success, next_fen, ...}
+        deactivate Logic
+        
+        par Broadcast
+            Server-->>ClientLib: MOVE_ACK (Success) to Sender
+            Server-->>ClientLib: MOVE_UPDATE to Opponent
+        end
+        deactivate Server
+        deactivate ClientLib
+        
+        ClientLib-->>UI: Callback on_move_response / on_game_update
+        UI->>UI: Update Board (set_fen) & Turn Label
+        deactivate UI
+    end
