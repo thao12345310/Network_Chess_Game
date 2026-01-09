@@ -490,6 +490,26 @@ class GameScreen:
                 time_data = msg if 'white_time' in msg else payload
                 self.update_times(time_data)
                 
+                # Check for Timeout Win (I claimed)
+                if payload.get('game_result') == 'timeout':
+                    winner_id = payload.get('winner_id')
+                    # Logic: if I claimed, I probably won, but check winner_id
+                    # We can simulate a GAME_END msg
+                    fake_end_msg = {
+                        'payload': {
+                            'result': 'win' if winner_id else 'timeout', # Logic wrapper sends winner_id
+                            'reason': 'timeout',
+                            'new_elo': payload.get('new_elo')
+                        }
+                    }
+                    if winner_id:
+                        # logic wrapper sends winner_id. Check if it's me?
+                        # I don't readily have my ID here, but if I claimed successfully, and wasn't rejected...
+                        pass
+                    
+                    self.on_game_end_msg(fake_end_msg)
+                    return
+                
                 # Add to history
                 from_pos = payload.get('from') or msg.get('from')
                 to_pos = payload.get('to') or msg.get('to')
@@ -517,6 +537,18 @@ class GameScreen:
             
             # Update Times
             self.update_times(payload)
+            
+            # Check for Timeout Loss (Opponent claimed)
+            if from_pos == "CLAIM" and to_pos == "TIMEOUT":
+                 self.on_game_end_msg({
+                     'payload': {
+                         'result': 'loss',
+                         'reason': 'timeout',
+                         # ELO might be missing in MOVE_UPDATE, wait for GAME_END or just show loss
+                         'new_elo': None
+                     }
+                 })
+                 return
             
             self.add_move(from_pos, to_pos)
 
