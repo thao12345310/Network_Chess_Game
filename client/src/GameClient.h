@@ -49,6 +49,7 @@ public:
     // Player list & matchmaking
     bool requestPlayerList();
     bool joinLobby(const std::string& mode = "RAPID");
+    bool cancelMatch();
     bool sendChallenge(const std::string& opponentUsername, const std::string& mode = "RAPID");
     bool acceptChallenge(const std::string& challengeId, const std::string& mode = "RAPID");
     bool declineChallenge(const std::string& challengeId);

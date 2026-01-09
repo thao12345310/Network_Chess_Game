@@ -32,6 +32,8 @@ namespace Protocol {
         
         // Matchmaking
         constexpr const char* MATCH_FIND_REQ = "MATCH_FIND_REQ";
+        constexpr const char* MATCH_CANCEL_REQ = "MATCH_CANCEL_REQ";
+        constexpr const char* MATCH_CANCEL_ACK = "MATCH_CANCEL_ACK";
         constexpr const char* MATCH_START = "MATCH_START";
         
         // Gameplay

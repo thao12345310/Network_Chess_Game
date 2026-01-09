@@ -224,6 +224,14 @@ extern "C"
         return 1; // Stub - implement actual matchmaking
     }
 
+    int client_cancel_match(ClientHandle handle)
+    {
+        if (!handle)
+            return 0;
+        ClientWrapper *wrapper = static_cast<ClientWrapper *>(handle);
+        return wrapper->client->cancelMatch() ? 1 : 0;
+    }
+
     int client_request_leaderboard(ClientHandle handle)
     {
         if (!handle)

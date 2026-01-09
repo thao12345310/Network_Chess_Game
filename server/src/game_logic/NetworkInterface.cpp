@@ -493,6 +493,48 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
         return "{\"messageType\": \"MATCH_FIND_ACK\", \"responseCode\": 200, \"payload\": {\"status\": \"waiting\", \"message\": \"Waiting for opponent with same game mode...\"}}";
     }
 
+    // MATCH_CANCEL_REQ - Cancel Matchmaking
+    else if (type == "MATCH_CANCEL_REQ" || action == "MATCH_CANCEL_REQ")
+    {
+        int my_id = 0;
+        {
+            std::lock_guard<std::mutex> lock(session_mutex);
+            if (client_sessions.find(clientSocket) != client_sessions.end())
+            {
+                my_id = client_sessions[clientSocket];
+            }
+        }
+
+        if (my_id == 0)
+        {
+            return "{\"messageType\": \"ERROR\", \"responseCode\": 401, \"payload\": {\"reason\": \"Not logged in\"}}";
+        }
+
+        std::lock_guard<std::mutex> lock(session_mutex);
+        
+        // Find and remove player from matchmaking queue
+        bool found = false;
+        for (auto it = matchmaking_queue.begin(); it != matchmaking_queue.end(); ++it)
+        {
+            if (it->player_id == my_id)
+            {
+                matchmaking_queue.erase(it);
+                found = true;
+                std::cout << "Player " << my_id << " cancelled matchmaking. Queue size: " << matchmaking_queue.size() << std::endl;
+                break;
+            }
+        }
+
+        if (found)
+        {
+            return "{\"messageType\": \"MATCH_CANCEL_ACK\", \"responseCode\": 200, \"payload\": {\"status\": \"cancelled\", \"message\": \"Matchmaking cancelled successfully\"}}";
+        }
+        else
+        {
+            return "{\"messageType\": \"MATCH_CANCEL_ACK\", \"responseCode\": 200, \"payload\": {\"status\": \"not_in_queue\", \"message\": \"You were not in the matchmaking queue\"}}";
+        }
+    }
+
     // LOBBY_LIST - Get list of online players
     else if (type == "LOBBY_LIST" || action == "LOBBY_LIST")
     {

@@ -95,6 +95,14 @@ bool GameClient::joinLobby(const std::string &mode)
     return netClient->sendMessage(msg);
 }
 
+bool GameClient::cancelMatch()
+{
+    Json::Value msg;
+    msg["messageType"] = "MATCH_CANCEL_REQ";
+
+    return netClient->sendMessage(msg);
+}
+
 bool GameClient::sendChallenge(const std::string &opponentUsername, const std::string &mode)
 {
     Json::Value msg;

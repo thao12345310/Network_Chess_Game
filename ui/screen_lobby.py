@@ -23,6 +23,13 @@ class LobbyScreen:
         
         self.players_data = []
         
+        # Matchmaking state
+        self.is_searching = False
+        self.search_start_time = None
+        self.search_timer_id = None
+        self.matching_dialog = None
+        self.MATCHMAKING_TIMEOUT = 60  # Timeout in seconds
+        
         # Main frame
         self.frame = tk.Frame(root, bg='#ECF0F1')
         
@@ -209,6 +216,7 @@ class LobbyScreen:
         """Setup network callbacks"""
         self.client.set_callback('LOBBY_LIST', self.on_player_list)
         self.client.set_callback('MATCH_START', self.on_game_start_msg)
+        self.client.set_callback('MATCH_CANCEL_ACK', self.on_match_cancel_ack)
         self.client.set_callback('CHALLENGE_NOTIFY', self.on_challenge_received)
         self.client.set_callback('CHALLENGE_RESP', self.on_challenge_response)
         self.client.set_callback('ERROR', self.on_error_response)
@@ -268,19 +276,180 @@ class LobbyScreen:
                           f"Waiting for response...")
     
     def do_random_match(self):
-        """Find random opponent"""
+        """Find random opponent with cancel and timeout support"""
+        if self.is_searching:
+            return
+        
         mode = self.game_mode.get()
-        # Pass mode to matchmaking request
+        mode_names = {"BLITZ": "5 min", "RAPID": "10 min", "CLASSICAL": "30 min"}
+        
+        # Start matchmaking
         self.client.random_match(mode)
         self.log(f"Searching for random opponent (Mode: {mode})...")
         
-        mode_names = {"BLITZ": "5 min", "RAPID": "10 min", "CLASSICAL": "30 min"}
-        messagebox.showinfo("Searching", 
-                          f"Finding a random opponent...\n"
-                          f"Mode: {mode} ({mode_names.get(mode, '')})")
+        # Set searching state
+        self.is_searching = True
+        self.search_start_time = datetime.now()
+        
+        # Disable the random match button while searching
+        self.random_btn.config(state='disabled')
+        
+        # Create matching dialog
+        self.show_matching_dialog(mode, mode_names.get(mode, ''))
+    
+    def show_matching_dialog(self, mode, mode_time):
+        """Show a dialog while searching for opponent"""
+        self.matching_dialog = tk.Toplevel(self.root)
+        self.matching_dialog.title("Finding Opponent...")
+        self.matching_dialog.geometry("400x250")
+        self.matching_dialog.resizable(False, False)
+        self.matching_dialog.transient(self.root)
+        self.matching_dialog.grab_set()
+        
+        # Center the dialog
+        self.matching_dialog.update_idletasks()
+        x = (self.matching_dialog.winfo_screenwidth() - 400) // 2
+        y = (self.matching_dialog.winfo_screenheight() - 250) // 2
+        self.matching_dialog.geometry(f"400x250+{x}+{y}")
+        
+        # Prevent closing via X button
+        self.matching_dialog.protocol("WM_DELETE_WINDOW", self.cancel_matching)
+        
+        # Configure dialog background
+        self.matching_dialog.configure(bg='#2C3E50')
+        
+        # Title
+        title_label = tk.Label(self.matching_dialog, 
+                              text="🔍 Finding Opponent...",
+                              font=("Arial", 18, "bold"),
+                              fg='#ECF0F1', bg='#2C3E50')
+        title_label.pack(pady=20)
+        
+        # Mode info
+        mode_label = tk.Label(self.matching_dialog,
+                             text=f"Mode: {mode} ({mode_time})",
+                             font=("Arial", 12),
+                             fg='#BDC3C7', bg='#2C3E50')
+        mode_label.pack()
+        
+        # Animated waiting indicator
+        self.waiting_var = tk.StringVar(value="Searching...")
+        self.waiting_label = tk.Label(self.matching_dialog,
+                                      textvariable=self.waiting_var,
+                                      font=("Arial", 14),
+                                      fg='#3498DB', bg='#2C3E50')
+        self.waiting_label.pack(pady=15)
+        
+        # Timer display
+        self.timer_var = tk.StringVar(value=f"Time remaining: {self.MATCHMAKING_TIMEOUT}s")
+        self.timer_label = tk.Label(self.matching_dialog,
+                                   textvariable=self.timer_var,
+                                   font=("Arial", 11),
+                                   fg='#F39C12', bg='#2C3E50')
+        self.timer_label.pack()
+        
+        # Cancel button
+        cancel_btn = tk.Button(self.matching_dialog,
+                              text="❌ Cancel Matching",
+                              command=self.cancel_matching,
+                              bg='#E74C3C', fg='white',
+                              font=("Arial", 12, "bold"),
+                              relief='flat', cursor='hand2',
+                              width=18)
+        cancel_btn.pack(pady=25, ipady=8)
+        
+        # Start the timer and animation
+        self.animation_frame = 0
+        self.update_matching_dialog()
+    
+    def update_matching_dialog(self):
+        """Update the matching dialog with animation and timer"""
+        if not self.is_searching or not self.matching_dialog:
+            return
+        
+        # Check if dialog still exists
+        try:
+            self.matching_dialog.winfo_exists()
+        except tk.TclError:
+            self.is_searching = False
+            return
+        
+        # Calculate elapsed time
+        elapsed = (datetime.now() - self.search_start_time).total_seconds()
+        remaining = max(0, self.MATCHMAKING_TIMEOUT - int(elapsed))
+        
+        # Update timer
+        self.timer_var.set(f"Time remaining: {remaining}s")
+        
+        # Update animation
+        dots = "." * (self.animation_frame % 4)
+        self.waiting_var.set(f"Searching{dots.ljust(3)}")
+        self.animation_frame += 1
+        
+        # Check for timeout
+        if elapsed >= self.MATCHMAKING_TIMEOUT:
+            self.handle_matching_timeout()
+            return
+        
+        # Schedule next update (every 500ms)
+        self.search_timer_id = self.root.after(500, self.update_matching_dialog)
+    
+    def cancel_matching(self):
+        """Cancel the matchmaking process"""
+        if not self.is_searching:
+            return
+        
+        # Send cancel request to server
+        self.client.cancel_match()
+        self.log("Matchmaking cancelled by user")
+        
+        # Clean up
+        self.cleanup_matching()
+        
+    def handle_matching_timeout(self):
+        """Handle matchmaking timeout"""
+        if not self.is_searching:
+            return
+        
+        # Send cancel request to server
+        self.client.cancel_match()
+        self.log("Matchmaking timed out after 60 seconds")
+        
+        # Clean up
+        self.cleanup_matching()
+        
+        # Show timeout message
+        messagebox.showwarning("Matchmaking Timeout",
+                              "Could not find an opponent within 60 seconds.\n"
+                              "Please try again or select a different game mode.")
+    
+    def cleanup_matching(self):
+        """Clean up matchmaking state"""
+        self.is_searching = False
+        self.search_start_time = None
+        
+        # Cancel scheduled timer
+        if self.search_timer_id:
+            self.root.after_cancel(self.search_timer_id)
+            self.search_timer_id = None
+        
+        # Close dialog
+        if self.matching_dialog:
+            try:
+                self.matching_dialog.destroy()
+            except tk.TclError:
+                pass
+            self.matching_dialog = None
+        
+        # Re-enable the random match button
+        self.random_btn.config(state='normal')
     
     def do_logout(self):
         """Logout and return to login screen"""
+        # Cancel any ongoing matchmaking
+        if self.is_searching:
+            self.cancel_matching()
+            
         result = messagebox.askyesno("Logout", "Are you sure you want to logout?")
         if result:
             self.client.logout()
@@ -310,10 +479,27 @@ class LobbyScreen:
         self.player_count_label.config(text=f"{len(self.players_data)} players")
         self.log(f"Players online: {len(self.players_data)}")
     
+    def on_match_cancel_ack(self, msg):
+        """Handle match cancel acknowledgement"""
+        print(f"DEBUG: MATCH_CANCEL_ACK received: {msg}")
+        payload = msg.get('payload', {})
+        status = payload.get('status', '')
+        message = payload.get('message', '')
+        
+        if status == 'cancelled':
+            self.log("Server confirmed: Matchmaking cancelled")
+        else:
+            self.log(f"Cancel response: {message}")
+    
 
     def on_game_start_msg(self, msg):
         """Handle game start message"""
         print(f"DEBUG: MATCH_START received: {msg}")
+        
+        # Clean up any ongoing matching
+        if self.is_searching:
+            self.cleanup_matching()
+        
         payload = msg.get('payload', {})
         game_id = payload.get('game_id')
         opponent_id = payload.get('opponent_id')

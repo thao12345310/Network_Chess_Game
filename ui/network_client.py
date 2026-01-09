@@ -110,6 +110,9 @@ class ChessClient:
         lib.client_join_lobby.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
         lib.client_join_lobby.restype = ctypes.c_int
         
+        lib.client_cancel_match.argtypes = [ctypes.c_void_p]
+        lib.client_cancel_match.restype = ctypes.c_int
+        
         # Rematch functions
         lib.client_request_rematch.argtypes = [ctypes.c_void_p]
         lib.client_request_rematch.restype = ctypes.c_int
@@ -299,6 +302,13 @@ class ChessClient:
             return False
         # Call with mode
         result = self.lib.client_join_lobby(self.handle, mode.encode('utf-8'))
+        return result == 1
+    
+    def cancel_match(self):
+        """Cancel matchmaking"""
+        if not self.handle:
+            return False
+        result = self.lib.client_cancel_match(self.handle)
         return result == 1
     
     def logout(self):
