@@ -496,30 +496,46 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
     // LOBBY_LIST - Get list of online players
     else if (type == "LOBBY_LIST" || action == "LOBBY_LIST")
     {
-        // Get players from Python (database)
-        std::string list_res = execute_logic_command("{\"action\": \"get_ready_players\"}");
-        std::cout << "LOBBY_LIST Python response: " << list_res << std::endl;
-
-        // The response from Python has players array, reformat for protocol
-        // For now, just forward the response but wrap it properly
-        // Extract the players array from the response
-        size_t players_start = list_res.find("\"players\":");
-        if (players_start != std::string::npos)
+        // Build list of online players from client_sessions (actual connected players)
+        std::vector<int> online_player_ids;
         {
-            size_t arr_start = list_res.find("[", players_start);
-            size_t arr_end = list_res.find("]", arr_start);
-            if (arr_start != std::string::npos && arr_end != std::string::npos)
+            std::lock_guard<std::mutex> lock(session_mutex);
+            for (const auto& [sock, pid] : client_sessions)
             {
-                std::string players_arr = list_res.substr(arr_start, arr_end - arr_start + 1);
-                std::string response = "{\"messageType\": \"LOBBY_LIST\", \"responseCode\": 200, \"payload\": {\"players\": " + players_arr + "}}";
-                std::cout << "LOBBY_LIST response: " << response << std::endl;
-                return response;
+                online_player_ids.push_back(pid);
             }
         }
-
-        // Fallback - return empty list
-        std::cout << "LOBBY_LIST returning empty list (fallback)" << std::endl;
-        return "{\"messageType\": \"LOBBY_LIST\", \"responseCode\": 200, \"payload\": {\"players\": []}}";
+        
+        std::cout << "LOBBY_LIST: Found " << online_player_ids.size() << " online players" << std::endl;
+        
+        // Build players array by fetching info for each online player from database
+        std::string players_arr = "[";
+        bool first = true;
+        for (int pid : online_player_ids)
+        {
+            // Get player info from database
+            std::string get_info_req = "{\"action\": \"get_player_info\", \"player_id\": " + std::to_string(pid) + "}";
+            std::string info_res = execute_logic_command(get_info_req);
+            
+            // Extract username and elo from response
+            std::string username = get_json_string(info_res, "username");
+            int elo = get_json_int(info_res, "elo");
+            
+            // Skip if we couldn't get player info
+            if (username.empty()) continue;
+            
+            if (!first) players_arr += ", ";
+            first = false;
+            
+            players_arr += "{\"player_id\": " + std::to_string(pid) + 
+                          ", \"username\": \"" + username + "\"" +
+                          ", \"elo\": " + std::to_string(elo) + "}";
+        }
+        players_arr += "]";
+        
+        std::string response = "{\"messageType\": \"LOBBY_LIST\", \"responseCode\": 200, \"payload\": {\"players\": " + players_arr + "}}";
+        std::cout << "LOBBY_LIST response: " << response << std::endl;
+        return response;
     }
 
     // LEADERBOARD_REQ - Get top players by ELO

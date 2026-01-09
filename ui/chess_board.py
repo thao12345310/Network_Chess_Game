@@ -5,6 +5,8 @@ Chess Board Logic and Rendering
 """
 
 import tkinter as tk
+from board_themes import BoardTheme
+from appearance_settings import AppearanceSettings
 
 try:
     import chess
@@ -17,13 +19,7 @@ except ImportError:
 class ChessBoard:
     """Chess Board with Tkinter Canvas"""
     
-    # Unicode chess pieces
-    PIECES = {
-        'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙',
-        'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟'
-    }
-    
-    def __init__(self, canvas, square_size=80):
+    def __init__(self, canvas, square_size=80, appearance_settings=None):
         self.canvas = canvas
         self.square_size = square_size
         self.selected_square = None
@@ -31,6 +27,40 @@ class ChessBoard:
         self.board = self.init_board()
         self.current_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
         self.is_flipped = False
+        
+        # Appearance settings
+        self.appearance_settings = appearance_settings or AppearanceSettings()
+        self.load_theme()
+    
+    def load_theme(self):
+        """Load theme và piece style từ settings"""
+        theme_name = self.appearance_settings.get('board_theme', 'classic')
+        piece_style_name = self.appearance_settings.get('piece_style', 'classic')
+        
+        print(f"DEBUG ChessBoard.load_theme(): theme_name={theme_name}, piece_style={piece_style_name}")
+        print(f"DEBUG ChessBoard.load_theme(): settings={self.appearance_settings.settings}")
+        
+        self.theme = BoardTheme.get_theme(theme_name)
+        self.piece_style = BoardTheme.get_piece_style(piece_style_name)
+        
+        print(f"DEBUG ChessBoard.load_theme(): theme colors={self.theme}")
+        
+        # Square size từ settings
+        saved_size = self.appearance_settings.get('square_size', 80)
+        if saved_size != self.square_size:
+            self.square_size = saved_size
+    
+    def apply_theme(self, theme_name):
+        """Áp dụng theme mới"""
+        self.appearance_settings.set('board_theme', theme_name)
+        self.load_theme()
+        self.draw()
+    
+    def apply_piece_style(self, style_name):
+        """Áp dụng piece style mới"""
+        self.appearance_settings.set('piece_style', style_name)
+        self.load_theme()
+        self.draw()
     
     def set_flipped(self, flipped):
         """Set board orientation (True for Black at bottom)"""
@@ -59,9 +89,45 @@ class ChessBoard:
         self.current_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
         self.is_flipped = False
     
+    def load_fen(self, fen):
+        """Load board from FEN string"""
+        if not HAS_CHESS:
+            print("WARNING: Cannot load FEN without python-chess library")
+            return False
+        
+        try:
+            board_obj = chess.Board(fen)
+            self.current_fen = fen
+            
+            # Convert chess.Board to internal board representation
+            self.board = [[' ' for _ in range(8)] for _ in range(8)]
+            
+            for square in chess.SQUARES:
+                piece = board_obj.piece_at(square)
+                if piece:
+                    row = 7 - chess.square_rank(square)  # chess library: rank 0 = bottom
+                    col = chess.square_file(square)
+                    self.board[row][col] = piece.symbol()
+            
+            self.selected_square = None
+            self.highlighted_squares = []
+            return True
+        except Exception as e:
+            print(f"ERROR loading FEN: {e}")
+            return False
+    
     def draw(self):
         """Draw chess board on canvas"""
         self.canvas.delete("all")
+        
+        # Get settings with explicit defaults to ensure they're never None
+        show_coords = self.appearance_settings.get('show_coordinates')
+        if show_coords is None:
+            show_coords = True
+        
+        show_legal = self.appearance_settings.get('show_legal_moves')
+        if show_legal is None:
+            show_legal = True
         
         # Draw squares
         for v_row in range(8):
@@ -77,26 +143,23 @@ class ChessBoard:
                 x2 = x1 + self.square_size
                 y2 = y1 + self.square_size
                 
-                # Base color - Check based on logical or visual? 
-                # Visual check maintains checkerboard pattern relative to screen.
-                # Logical check maintains checkerboard relative to board (h1 is always light).
-                # (row+col)%2 == 0 -> Light.
-                color = "#F0D9B5" if (row + col) % 2 == 0 else "#B58863"
+                # Base color from theme
+                color = self.theme['light_square'] if (row + col) % 2 == 0 else self.theme['dark_square']
                 
                 # Highlight selected square
                 if self.selected_square and self.selected_square == (row, col):
-                    color = "#BACA44"
+                    color = self.theme['selected']
                 
                 # Highlight valid move squares
                 is_valid_move = (row, col) in self.highlighted_squares
-                if is_valid_move:
-                    # Use a different highlight color for valid moves
-                    color = "#AED581" if (row + col) % 2 == 0 else "#8BC34A"
+                if is_valid_move and show_legal:
+                    # Use theme colors for valid moves
+                    color = self.theme['valid_move_light'] if (row + col) % 2 == 0 else self.theme['valid_move_dark']
                 
                 self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="gray")
                 
                 # Draw valid move indicator (circle)
-                if is_valid_move:
+                if is_valid_move and show_legal:
                     piece = self.board[row][col]
                     cx = x1 + self.square_size / 2
                     cy = y1 + self.square_size / 2
@@ -106,39 +169,43 @@ class ChessBoard:
                         r = 10
                         self.canvas.create_oval(
                             cx - r, cy - r, cx + r, cy + r,
-                            fill="#555555", outline=""
+                            fill=self.theme['move_indicator'], outline=""
                         )
                     else:
                         # Capturable piece - draw ring around square
                         r = self.square_size / 2 - 5
                         self.canvas.create_oval(
                             cx - r, cy - r, cx + r, cy + r,
-                            fill="", outline="#E53935", width=4
+                            fill="", outline=self.theme['capture_ring'], width=4
                         )
                 
                 # Draw piece
                 piece = self.board[row][col]
                 if piece != ' ':
-                    piece_symbol = self.PIECES.get(piece, piece)
+                    piece_symbol = self.piece_style['pieces'].get(piece, piece)
+                    piece_font = self.piece_style['font']
+                    piece_color = self.piece_style['color']
+                    
                     self.canvas.create_text(
                         x1 + self.square_size/2, y1 + self.square_size/2,
-                        text=piece_symbol, font=("Arial", 48), fill="black"
+                        text=piece_symbol, font=piece_font, fill=piece_color
                     )
         
         # Draw coordinates
-        for i in range(8):
-            # Files (a-h)
-            label = chr(97 + (7 - i if self.is_flipped else i)) # h..a if flipped, a..h if normal
-            self.canvas.create_text(
-                i * self.square_size + self.square_size/2, 8 * self.square_size + 15,
-                text=label, font=("Arial", 12)
-            )
-            # Ranks (1-8)
-            label = str(i + 1 if self.is_flipped else 8 - i) # 1..8 if flipped, 8..1 if normal
-            self.canvas.create_text(
-                -15, i * self.square_size + self.square_size/2,
-                text=label, font=("Arial", 12)
-            )
+        if show_coords:
+            for i in range(8):
+                # Files (a-h)
+                label = chr(97 + (7 - i if self.is_flipped else i))
+                self.canvas.create_text(
+                    i * self.square_size + self.square_size/2, 8 * self.square_size + 15,
+                    text=label, font=("Arial", 12)
+                )
+                # Ranks (1-8)
+                label = str(i + 1 if self.is_flipped else 8 - i)
+                self.canvas.create_text(
+                    -15, i * self.square_size + self.square_size/2,
+                    text=label, font=("Arial", 12)
+                )
     
     def get_square_from_coords(self, x, y):
         """Convert canvas coordinates to board square"""

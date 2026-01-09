@@ -7,6 +7,8 @@ Login/Signup Screen
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
+from protocol_constants import MessageType, ResponseCode, PayloadFields
+from protocol_schemas import LoginResponsePayload, safe_get_payload
 
 
 class LoginScreen:
@@ -211,11 +213,11 @@ class LoginScreen:
         
         if self.is_login_mode:
             # Login
-            self.client.set_callback('AUTH_LOGIN_ACK', self.on_login_response)
+            self.client.set_callback(MessageType.AUTH_LOGIN_ACK, self.on_login_response)
             self.client.login(username, password)
         else:
             # Register
-            self.client.set_callback('AUTH_REGISTER_ACK', self.on_register_response)
+            self.client.set_callback(MessageType.AUTH_REGISTER_ACK, self.on_register_response)
             self.client.register(username, password)
     
     def on_login_response(self, msg):
@@ -226,18 +228,26 @@ class LoginScreen:
         
         print(f"DEBUG on_login_response: {msg}")
         response_code = msg.get('responseCode', 0)
-        payload = msg.get('payload') or {}  # Handle None payload
         
-        if response_code == 200:
-            # Success
-            self.client.username = self.username_entry.get()
-            elo = payload.get('elo', 1200) if isinstance(payload, dict) else 1200
-            
-            messagebox.showinfo("Success", f"Welcome {self.client.username}!\nELO: {elo}")
-            self.on_login_success(elo)
+        if response_code == ResponseCode.SUCCESS:
+            # Success - Use typed payload
+            payload = safe_get_payload(msg, LoginResponsePayload)
+            if payload:
+                self.client.username = self.username_entry.get()
+                messagebox.showinfo("Success", f"Welcome {self.client.username}!\nELO: {payload.elo}")
+                self.on_login_success(payload.elo, payload.user_id)
+            else:
+                # Fallback to dict access
+                payload_dict = msg.get('payload') or {}
+                elo = payload_dict.get(PayloadFields.ELO, 1200) if isinstance(payload_dict, dict) else 1200
+                player_id = payload_dict.get(PayloadFields.USER_ID) if isinstance(payload_dict, dict) else None
+                self.client.username = self.username_entry.get()
+                messagebox.showinfo("Success", f"Welcome {self.client.username}!\nELO: {elo}")
+                self.on_login_success(elo, player_id)
         else:
             # Error
-            reason = payload.get('reason', 'Login failed') if isinstance(payload, dict) else 'Login failed'
+            payload_dict = msg.get('payload') or {}
+            reason = payload_dict.get(PayloadFields.REASON, 'Login failed') if isinstance(payload_dict, dict) else 'Login failed'
             messagebox.showerror("Login Failed", f"Error {response_code}: {reason}")
     
     def on_register_response(self, msg):
@@ -250,13 +260,13 @@ class LoginScreen:
         response_code = msg.get('responseCode', 0)
         payload = msg.get('payload') or {}  # Handle None payload
         
-        if response_code == 201:
+        if response_code == ResponseCode.CREATED:
             # Success (Created)
             messagebox.showinfo("Success", "Registration successful! Please login.")
             self.toggle_mode()
         else:
             # Error
-            reason = payload.get('reason', 'Registration failed') if isinstance(payload, dict) else 'Registration failed'
+            reason = payload.get(PayloadFields.REASON, 'Registration failed') if isinstance(payload, dict) else 'Registration failed'
             messagebox.showerror("Registration Failed", f"Error {response_code}: {reason}")
     
     def show(self):

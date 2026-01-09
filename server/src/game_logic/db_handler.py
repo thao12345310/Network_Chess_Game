@@ -69,10 +69,11 @@ def insert_move(game_id, player_id, move_notation):
     conn.close()
 
 
-def create_game(white_id, black_id, mode='RAPID', time_limit=None):
+def create_game(white_id, black_id, mode='RAPID', time_limit=None, custom_fen=None):
     """
     Create a new game with specified mode and time limit.
     time_limit should be in seconds. If not provided, defaults based on mode.
+    custom_fen: Optional FEN string for custom board setup (for practice mode)
     """
     import datetime
     
@@ -81,9 +82,13 @@ def create_game(white_id, black_id, mode='RAPID', time_limit=None):
         mode_times = {
             "BLITZ": 300.0,      # 5 mins
             "RAPID": 600.0,      # 10 mins
-            "CLASSICAL": 1800.0  # 30 mins
+            "CLASSICAL": 1800.0, # 30 mins
+            "PRACTICE": None     # No time limit for practice
         }
         time_limit = mode_times.get(mode.upper(), 600.0)
+    
+    # Use custom FEN if provided, otherwise use standard starting position
+    initial_fen = custom_fen if custom_fen else INITIAL_FEN
     
     conn = get_connection()
     cur = conn.cursor()
@@ -94,7 +99,7 @@ def create_game(white_id, black_id, mode='RAPID', time_limit=None):
         INSERT INTO Game (white_id, black_id, mode, white_time, black_time, last_move_time, status, start_time, current_fen)
         VALUES (?, ?, ?, ?, ?, ?, 'ONGOING', ?, ?)
         """,
-        (white_id, black_id, mode, time_limit, time_limit, now_ts, start_time, INITIAL_FEN)
+        (white_id, black_id, mode, time_limit, time_limit, now_ts, start_time, initial_fen)
     )
     game_id = cur.lastrowid
     conn.commit()
@@ -135,6 +140,23 @@ def get_player_rating(player_id):
     if result:
         return result[0]
     return 1200 # Default if not found, though ideally should exist
+
+
+def get_player_info_by_id(player_id):
+    """
+    Get player information (username and elo) by player_id.
+    Returns dict with username and elo, or None if not found.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT username, elo FROM Player WHERE player_id = ?", (player_id,))
+        result = cur.fetchone()
+        if result:
+            return {"username": result[0], "elo": result[1]}
+        return None
+    finally:
+        conn.close()
 
 
 def update_both_players_elo(player_a_id, new_elo_a, player_b_id, new_elo_b):
@@ -431,5 +453,66 @@ def get_leaderboard_data(limit=100):
             {"username": r[0], "elo": r[1]} 
             for r in cur.fetchall()
         ]
+    finally:
+        conn.close()
+
+
+def get_player_game_history(player_id):
+    """
+    Get all finished games for a specific player.
+    Returns list of game summaries ordered by most recent first.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT 
+                g.game_id, 
+                g.mode, 
+                g.start_time, 
+                g.end_time,
+                g.status,
+                g.winner_id,
+                g.white_id,
+                g.black_id,
+                p1.username as white_username,
+                p2.username as black_username
+            FROM Game g
+            JOIN Player p1 ON g.white_id = p1.player_id
+            JOIN Player p2 ON g.black_id = p2.player_id
+            WHERE (g.white_id = ? OR g.black_id = ?)
+                AND g.status = 'FINISHED'
+            ORDER BY g.end_time DESC
+        """, (player_id, player_id))
+        
+        games = []
+        for row in cur.fetchall():
+            game_id, mode, start_time, end_time, status, winner_id, white_id, black_id, white_username, black_username = row
+            
+            # Determine result from player's perspective
+            if winner_id is None:
+                result = "DRAW"
+            elif winner_id == player_id:
+                result = "WIN"
+            else:
+                result = "LOSS"
+            
+            # Determine player's color
+            player_color = "WHITE" if white_id == player_id else "BLACK"
+            opponent_username = black_username if player_color == "WHITE" else white_username
+            
+            games.append({
+                "game_id": game_id,
+                "mode": mode,
+                "start_time": start_time,
+                "end_time": end_time,
+                "result": result,
+                "player_color": player_color,
+                "opponent_username": opponent_username,
+                "white_username": white_username,
+                "black_username": black_username
+            })
+        
+        return games
     finally:
         conn.close()
