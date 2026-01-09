@@ -34,6 +34,8 @@ class MessageType:
     
     # Matchmaking
     MATCH_FIND_REQ = "MATCH_FIND_REQ"
+    MATCH_CANCEL_REQ = "MATCH_CANCEL_REQ"
+    MATCH_CANCEL_ACK = "MATCH_CANCEL_ACK"
     MATCH_START = "MATCH_START"
     
     # Gameplay

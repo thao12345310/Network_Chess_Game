@@ -239,7 +239,7 @@ class LobbyScreen:
         """Setup network callbacks"""
         self.client.set_callback(MessageType.LOBBY_LIST, self.on_player_list)
         self.client.set_callback(MessageType.MATCH_START, self.on_game_start_msg)
-        self.client.set_callback('MATCH_CANCEL_ACK', self.on_match_cancel_ack)
+        self.client.set_callback(MessageType.MATCH_CANCEL_ACK, self.on_match_cancel_ack)
         self.client.set_callback(MessageType.CHALLENGE_NOTIFY, self.on_challenge_received)
         self.client.set_callback(MessageType.CHALLENGE_RESP, self.on_challenge_response)
         self.client.set_callback(MessageType.ERROR, self.on_error_response)
