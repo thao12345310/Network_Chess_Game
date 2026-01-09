@@ -411,6 +411,14 @@ def main():
                         'FINISHED',
                         datetime.datetime.utcnow().isoformat()
                     )
+                    
+                    # Calculate and update ELO for timeout
+                    white_rating = get_player_rating(white_id)
+                    black_rating = get_player_rating(black_id)
+                    score_white = 1.0 if timeout_winner == white_id else 0.0
+                    new_white_elo, new_black_elo = calculate_elo(white_rating, black_rating, score_white)
+                    update_both_players_elo(white_id, new_white_elo, black_id, new_black_elo)
+                    
                     response = {
                         "messageType": "MOVE_ACK",
                         "status": "success",
@@ -421,7 +429,12 @@ def main():
                         "winner_id": timeout_winner,
                         "white_time": white_time,
                         "black_time": black_time,
-                         "opponent_id": white_id if timeout_winner == black_id else black_id # Approximate
+                        "opponent_id": white_id if timeout_winner == black_id else black_id,
+                        # Include all data for GAME_END broadcast
+                        "white_id": white_id,
+                        "black_id": black_id,
+                        "new_white_elo": new_white_elo,
+                        "new_black_elo": new_black_elo
                     }
                     print(json.dumps(response))
                     return

@@ -565,6 +565,26 @@ class GameScreen:
             self.chess_board.clear_selection()
             self.chess_board.draw()
         else:
+            # Check for Timeout Win FIRST (before FEN check)
+            # game_result can be at root level OR in payload
+            game_result = msg.get('game_result') or payload.get('game_result')
+            if game_result == 'timeout':
+                winner_id = msg.get('winner_id') or payload.get('winner_id')
+                new_elo = msg.get('new_elo') or payload.get('new_elo')
+                
+                print(f"DEBUG: Timeout detected! winner_id={winner_id}")
+                
+                # I claimed, so I won
+                fake_end_msg = {
+                    'payload': {
+                        'result': 'win',
+                        'reason': 'timeout',
+                        'new_elo': new_elo
+                    }
+                }
+                self.on_game_end_msg(fake_end_msg)
+                return
+            
             # Valid move confirmed by server
             # Update board state
             next_fen = payload.get(PayloadFields.NEXT_FEN) or msg.get(PayloadFields.NEXT_FEN)
@@ -576,26 +596,6 @@ class GameScreen:
                 # MOVE_ACK has times in root msg, MOVE_UPDATE in payload
                 time_data = msg if PayloadFields.WHITE_TIME in msg else payload
                 self.update_times(time_data)
-                
-                # Check for Timeout Win (I claimed)
-                if payload.get('game_result') == 'timeout':
-                    winner_id = payload.get('winner_id')
-                    # Logic: if I claimed, I probably won, but check winner_id
-                    # We can simulate a GAME_END msg
-                    fake_end_msg = {
-                        'payload': {
-                            'result': 'win' if winner_id else 'timeout', # Logic wrapper sends winner_id
-                            'reason': 'timeout',
-                            'new_elo': payload.get('new_elo')
-                        }
-                    }
-                    if winner_id:
-                        # logic wrapper sends winner_id. Check if it's me?
-                        # I don't readily have my ID here, but if I claimed successfully, and wasn't rejected...
-                        pass
-                    
-                    self.on_game_end_msg(fake_end_msg)
-                    return
                 
                 # Add to history
                 from_pos = payload.get(PayloadFields.FROM) or msg.get(PayloadFields.FROM)

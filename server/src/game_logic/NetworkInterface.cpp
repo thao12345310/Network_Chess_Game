@@ -1393,9 +1393,9 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                     }
                 }
 
-                // Check for Game Over (Checkmate/Draw)
+                // Check for Game Over (Checkmate/Draw/Timeout)
                 std::string game_result = get_json_string(result, "game_result");
-                if (game_result == "checkmate" || game_result == "draw")
+                if (game_result == "checkmate" || game_result == "draw" || game_result == "timeout")
                 {
                     int white_id = get_json_int(result, "white_id");
                     int black_id = get_json_int(result, "black_id");
@@ -1412,7 +1412,7 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                         if (pid == white_id || pid == black_id)
                         {
                             std::string result_str = "draw";
-                            std::string reason_str = (game_result == "checkmate") ? "checkmate" : "draw";
+                            std::string reason_str = game_result;  // "checkmate", "draw", or "timeout"
                             int new_elo = 0;
 
                             if (pid == white_id)
@@ -1420,7 +1420,7 @@ std::string NetworkInterface::process_request(SOCKET clientSocket, const std::st
                             else
                                 new_elo = new_black_elo;
 
-                            if (game_result == "checkmate")
+                            if (game_result == "checkmate" || game_result == "timeout")
                             {
                                 if (pid == winner_id)
                                     result_str = "win";
