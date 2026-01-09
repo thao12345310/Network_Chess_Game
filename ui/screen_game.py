@@ -30,6 +30,7 @@ class GameScreen:
         self.black_time_left = None
         self.is_game_active = False
         self.last_claim_time = 0
+        self.timer_delay_offset = 0 # Offset for initial startup delay
         self.is_practice_mode = False  # Practice mode flag
         
         # Store original MATCH_START callback from Lobby (to restore later)
@@ -285,6 +286,9 @@ class GameScreen:
         self.black_time_left = self.time_control_seconds
         # Timer starts immediately on game start (matching server logic)
         self.last_move_time = time.time()
+        
+        # Add 4s delay for initial startup stability
+        self.timer_delay_offset = 2.0
 
         
         self.player_time_label.config(text=time_str)
@@ -665,6 +669,9 @@ class GameScreen:
             import time
             self.last_move_time = time.time()
             
+            # Reset delay offset after first server update
+            self.timer_delay_offset = 0
+            
     def check_timeout(self):
         """Check if anyone has timed out"""
         if not self.is_game_active:
@@ -680,7 +687,10 @@ class GameScreen:
         
         import time
         now = time.time()
-        elapsed = now - self.last_move_time
+        # Apply delay offset if active
+        elapsed = now - self.last_move_time - self.timer_delay_offset
+        if elapsed < 0:
+            elapsed = 0
         
         # Determine current turn
         fen = self.chess_board.current_fen
