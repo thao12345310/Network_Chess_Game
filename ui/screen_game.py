@@ -7,6 +7,7 @@ Game Screen - Màn hình chơi cờ
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from chess_board import ChessBoard
+from protocol_constants import MessageType, ResponseCode, PayloadFields
 
 
 class GameScreen:
@@ -223,13 +224,13 @@ class GameScreen:
     
     def setup_callbacks(self):
         """Setup network callbacks"""
-        self.client.set_callback('MOVE_ACK', self.on_move_response)
-        self.client.set_callback('MOVE_UPDATE', self.on_game_update)
-        self.client.set_callback('EMOJI_UPDATE', self.on_emoji_update)
-        self.client.set_callback('GAME_END', self.on_game_end_msg)
-        self.client.set_callback('DRAW_OFFER_NOTIFY', self.on_draw_offer_received)
-        self.client.set_callback('REMATCH_REQUEST_NOTIFY', self.on_rematch_request_received)
-        self.client.set_callback('REMATCH_DECLINED_NOTIFY', self.on_rematch_declined)
+        self.client.set_callback(MessageType.MOVE_ACK, self.on_move_response)
+        self.client.set_callback(MessageType.MOVE_UPDATE, self.on_game_update)
+        self.client.set_callback(MessageType.EMOJI_UPDATE, self.on_emoji_update)
+        self.client.set_callback(MessageType.GAME_END, self.on_game_end_msg)
+        self.client.set_callback(MessageType.DRAW_OFFER_NOTIFY, self.on_draw_offer_received)
+        self.client.set_callback(MessageType.REMATCH_REQUEST_NOTIFY, self.on_rematch_request_received)
+        self.client.set_callback(MessageType.REMATCH_DECLINED_NOTIFY, self.on_rematch_declined)
         # NOTE: DO NOT register MATCH_START here - it will override Lobby's callback
         # MATCH_START for rematch is registered dynamically when needed
     
@@ -249,12 +250,12 @@ class GameScreen:
         # Only register MATCH_START callback on first game start (not rematch)
         if not is_rematch:
             # Save Lobby's MATCH_START callback before overriding it
-            if 'MATCH_START' in self.client.callbacks and self.lobby_match_start_callback is None:
-                self.lobby_match_start_callback = self.client.callbacks['MATCH_START']
+            if MessageType.MATCH_START in self.client.callbacks and self.lobby_match_start_callback is None:
+                self.lobby_match_start_callback = self.client.callbacks[MessageType.MATCH_START]
                 print("DEBUG: Saved Lobby's MATCH_START callback")
             
             # Register our MATCH_START callback now (for rematch)
-            self.client.set_callback('MATCH_START', self.on_match_start)
+            self.client.set_callback(MessageType.MATCH_START, self.on_match_start)
             print("DEBUG: Registered GameScreen's MATCH_START callback")
         else:
             print("DEBUG: Rematch - callback already registered, skipping")
@@ -535,10 +536,10 @@ class GameScreen:
         payload = msg.get('payload', {})
         # Check success in payload (logic_wrapper now sends success: True)
         # OR check status if success field not present
-        is_success = msg.get('success') or payload.get('success') or payload.get('status') == 'success'
+        is_success = msg.get(PayloadFields.SUCCESS) or payload.get(PayloadFields.SUCCESS) or payload.get(PayloadFields.STATUS) == 'success'
         
         if not is_success:
-            error = msg.get('message') or payload.get('message') or 'Invalid move'
+            error = msg.get(PayloadFields.MESSAGE) or payload.get(PayloadFields.MESSAGE) or 'Invalid move'
             messagebox.showerror("Invalid Move", error)
             # Revert board - Clear selection
             self.chess_board.clear_selection()
@@ -546,19 +547,19 @@ class GameScreen:
         else:
             # Valid move confirmed by server
             # Update board state
-            next_fen = payload.get('next_fen') or msg.get('next_fen')
+            next_fen = payload.get(PayloadFields.NEXT_FEN) or msg.get(PayloadFields.NEXT_FEN)
             if next_fen:
                 self.chess_board.set_fen(next_fen)
                 self.chess_board.draw()
                 
                 # Update Times
                 # MOVE_ACK has times in root msg, MOVE_UPDATE in payload
-                time_data = msg if 'white_time' in msg else payload
+                time_data = msg if PayloadFields.WHITE_TIME in msg else payload
                 self.update_times(time_data)
                 
                 # Add to history
-                from_pos = payload.get('from') or msg.get('from')
-                to_pos = payload.get('to') or msg.get('to')
+                from_pos = payload.get(PayloadFields.FROM) or msg.get(PayloadFields.FROM)
+                to_pos = payload.get(PayloadFields.TO) or msg.get(PayloadFields.TO)
                 if from_pos and to_pos:
                      self.add_move(from_pos, to_pos)
             else:
@@ -568,15 +569,15 @@ class GameScreen:
     def on_game_update(self, msg):
         """Handle game update"""
         payload = msg.get('payload', {})
-        move = payload.get('last_move') or msg.get('last_move') 
+        move = payload.get(PayloadFields.LAST_MOVE) or msg.get(PayloadFields.LAST_MOVE) 
         
         if move:
             # Opponent's move
-            from_pos = move.get('from', '?')
-            to_pos = move.get('to', '?')
+            from_pos = move.get(PayloadFields.FROM, '?')
+            to_pos = move.get(PayloadFields.TO, '?')
             
             # Update board from server state
-            fen = payload.get('fen')
+            fen = payload.get(PayloadFields.FEN)
             if fen:
                 self.chess_board.set_fen(fen)
                 self.chess_board.draw()
@@ -588,8 +589,8 @@ class GameScreen:
 
     def update_times(self, payload):
         """Update timer labels from payload"""
-        white_time = payload.get('white_time')
-        black_time = payload.get('black_time')
+        white_time = payload.get(PayloadFields.WHITE_TIME)
+        black_time = payload.get(PayloadFields.BLACK_TIME)
         
         if white_time is not None and black_time is not None:
             # Format time mm:ss
@@ -611,8 +612,8 @@ class GameScreen:
     
     def on_emoji_update(self, msg):
         """Handle emoji/chat update from opponent"""
-        emoji = msg.get('emoji', '')
-        sender = msg.get('from', 'Opponent')
+        emoji = msg.get(PayloadFields.EMOJI, '')
+        sender = msg.get(PayloadFields.SENDER, 'Opponent')
         if emoji:
             # Display emoji in chat or as notification
             messagebox.showinfo("Emoji", f"{sender}: {emoji}")
@@ -620,9 +621,9 @@ class GameScreen:
     def on_game_end_msg(self, msg):
         """Handle game end"""
         payload = msg.get('payload', {})
-        result = payload.get('result', 'unknown')  # "win", "loss", "draw"
-        reason = payload.get('reason', 'Game ended')
-        new_elo = payload.get('new_elo', self.player_elo)
+        result = payload.get(PayloadFields.RESULT, 'unknown')  # "win", "loss", "draw"
+        reason = payload.get(PayloadFields.REASON, 'Game ended')
+        new_elo = payload.get(PayloadFields.NEW_ELO, self.player_elo)
         
         # Calculate ELO change
         elo_change = new_elo - self.player_elo if self.player_elo else 0
@@ -740,8 +741,8 @@ class GameScreen:
     def on_rematch_request_received(self, msg):
         """Handle rematch request from opponent"""
         payload = msg.get('payload', {})
-        requester_id = payload.get('requester_id')
-        game_id = payload.get('game_id')
+        requester_id = payload.get(PayloadFields.REQUESTER_ID)
+        game_id = payload.get(PayloadFields.GAME_ID)
         
         # IMPORTANT: Close any existing "request rematch" dialog
         # This ensures opponent's request is shown on top
@@ -851,7 +852,7 @@ class GameScreen:
     def on_rematch_declined(self, msg):
         """Handle when opponent declines rematch"""
         payload = msg.get('payload', {})
-        game_id = payload.get('game_id')
+        game_id = payload.get(PayloadFields.GAME_ID)
         
         messagebox.showinfo("Rematch Declined", "Your opponent declined the rematch request.")
         
@@ -862,7 +863,7 @@ class GameScreen:
     def on_match_start(self, msg):
         """Handle MATCH_START message - ONLY for rematch"""
         payload = msg.get('payload', {})
-        game_id = payload.get('game_id')
+        game_id = payload.get(PayloadFields.GAME_ID)
         is_rematch = payload.get('is_rematch', False)
         
         # IMPORTANT: Only handle if this is a rematch
@@ -939,7 +940,7 @@ class GameScreen:
         
         # Restore Lobby's MATCH_START callback
         if self.lobby_match_start_callback is not None:
-            self.client.set_callback('MATCH_START', self.lobby_match_start_callback)
+            self.client.set_callback(MessageType.MATCH_START, self.lobby_match_start_callback)
             print("DEBUG: Restored Lobby's MATCH_START callback")
 
 
@@ -961,8 +962,8 @@ if __name__ == "__main__":
         def make_move(self, game_id, from_pos, to_pos):
             print(f"[MOCK] Move: {from_pos} -> {to_pos} (game: {game_id})")
             # Simulate server response
-            if 'MOVE_ACK' in self.callbacks:
-                self.callbacks['MOVE_ACK']({'success': True})
+            if MessageType.MOVE_ACK in self.callbacks:
+                self.callbacks[MessageType.MOVE_ACK]({'success': True})
         
         def resign(self, game_id):
             print(f"[MOCK] Resign from game {game_id}")

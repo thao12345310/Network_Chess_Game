@@ -1,6 +1,6 @@
 {
   "board_theme": "classic",
-  "piece_style": "elegant",
+  "piece_style": "classic",
   "show_coordinates": true,
   "show_legal_moves": true,
   "square_size": 80
