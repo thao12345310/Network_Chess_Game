@@ -11,8 +11,11 @@ from screen_login import LoginScreen
 from screen_lobby import LobbyScreen
 from screen_leaderboard import LeaderboardScreen
 from screen_game import GameScreen
+from screen_appearance import AppearanceScreen
+from appearance_settings import AppearanceSettings
 from screen_game_history import GameHistoryScreen
 from screen_game_replay import GameReplayScreen
+from screen_board_setup import BoardSetupScreen
 
 
 
@@ -22,14 +25,17 @@ class ChessApp:
     def __init__(self, host='127.0.0.1', port=5001):
         self.root = tk.Tk()
         self.root.title("Network Chess Game")
-        self.root.geometry("1200x800")
-        self.root.resizable(False, False)
+        self.root.geometry("1200x900")
+        self.root.resizable(True, True)
         
         # Center window
         self.center_window()
         
         # Network client
         self.client = ChessClient(host=host, port=port)
+        
+        # Appearance settings (shared across screens)
+        self.appearance_settings = AppearanceSettings()
         
         # Current state
         self.current_screen = None
@@ -72,7 +78,9 @@ class ChessApp:
             self.on_game_start,
             self.show_leaderboard,
             self.on_logout,
-            self.show_game_history
+            self.show_game_history,
+            self.show_appearance_settings,
+            self.show_board_setup
         )
         
         # Leaderboard screen
@@ -86,7 +94,15 @@ class ChessApp:
         self.screens['game'] = GameScreen(
             self.root,
             self.client,
-            self.on_game_end
+            self.on_game_end,
+            self.appearance_settings
+        )
+        
+        # Appearance settings screen
+        self.screens['appearance'] = AppearanceScreen(
+            self.root,
+            self.appearance_settings,
+            self.show_lobby
         )
         
         # Game History screen (will be initialized after login)
@@ -96,6 +112,14 @@ class ChessApp:
         self.screens['game_replay'] = GameReplayScreen(
             self.root,
             self.show_game_history
+        )
+        
+        # Board Setup screen (practice mode)
+        self.screens['board_setup'] = BoardSetupScreen(
+            self.root,
+            self.on_practice_start,
+            self.show_lobby,
+            self.appearance_settings
         )
         
         # Show login screen
@@ -137,6 +161,9 @@ class ChessApp:
         """Show leaderboard screen"""
         self.show_screen('leaderboard')
     
+    def show_appearance_settings(self):
+        """Show appearance settings screen"""
+        self.show_screen('appearance')
     def show_game_history(self):
         """Show game history screen"""
         if self.screens['game_history']:
@@ -149,6 +176,10 @@ class ChessApp:
         self.screens['game_replay'].load_game(game_id, game_info)
         self.show_screen('game_replay')
     
+    def show_board_setup(self):
+        """Show board setup screen for practice mode"""
+        self.show_screen('board_setup')
+    
     def on_game_start(self, game_id, opponent, your_color, opponent_elo, time_control="10+0"):
         """Handle game start"""
         self.screens['game'].start_game(
@@ -158,6 +189,22 @@ class ChessApp:
             opponent_elo, 
             self.player_elo,
             time_control
+        )
+        self.show_screen('game')
+    
+    def on_practice_start(self, custom_fen):
+        """Handle practice mode start with custom board setup"""
+        # In practice mode, play against yourself
+        # Use "Practice" as opponent name
+        self.screens['game'].start_game(
+            game_id=None,  # No real game ID for practice
+            opponent="Practice Mode",
+            your_color="white",  # Start as white by default
+            opponent_elo=self.player_elo,
+            player_elo=self.player_elo,
+            time_control="∞",  # No time limit
+            is_rematch=False,
+            custom_fen=custom_fen
         )
         self.show_screen('game')
     

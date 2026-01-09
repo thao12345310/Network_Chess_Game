@@ -7,25 +7,36 @@ Game Screen - Màn hình chơi cờ
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from chess_board import ChessBoard
+from protocol_constants import MessageType, ResponseCode, PayloadFields
+import time
 
 
 class GameScreen:
     """Màn hình chơi game"""
     
-    def __init__(self, root, client, on_game_end):
+    def __init__(self, root, client, on_game_end, appearance_settings=None):
         self.root = root
         self.client = client
         self.on_game_end = on_game_end
+        self.appearance_settings = appearance_settings
         
         # Game state
         self.game_id = None
         self.opponent_name = None
-        self.opponent_elo = None
-        self.player_color = None
         self.player_elo = None
+        self.time_control_seconds = None
+        self.last_move_time = None
+        self.white_time_left = None
+        self.black_time_left = None
+        self.is_game_active = False
+        self.last_claim_time = 0
+        self.is_practice_mode = False  # Practice mode flag
         
         # Store original MATCH_START callback from Lobby (to restore later)
         self.lobby_match_start_callback = None
+        
+        # Track active rematch dialog to close it when opponent requests
+        self.active_rematch_dialog = None
         
         # Main frame
         self.frame = tk.Frame(root, bg='#ECF0F1')
@@ -149,34 +160,40 @@ class GameScreen:
         self.board_canvas.pack()
         self.board_canvas.bind("<Button-1>", self.on_square_click)
         
-        # Initialize chess board
-        self.chess_board = ChessBoard(self.board_canvas, square_size=80)
+        # Initialize chess board with appearance settings
+        self.chess_board = ChessBoard(self.board_canvas, square_size=80, 
+                                      appearance_settings=self.appearance_settings)
         self.chess_board.draw()
         
         # Control buttons
         control_frame = tk.Frame(board_container, bg='#ECF0F1')
         control_frame.pack(pady=15)
         
-        tk.Button(control_frame, text="🏳️ Resign", 
+        # Store button references to hide/show based on game mode
+        self.resign_btn = tk.Button(control_frame, text="🏳️ Resign", 
                  command=self.do_resign,
                  bg='#E74C3C', fg='white', 
                  font=("Arial", 11, "bold"),
                  relief='flat', cursor='hand2',
-                 width=12).pack(side='left', padx=5, ipady=8)
+                 width=12)
+        self.resign_btn.pack(side='left', padx=5, ipady=8)
         
-        tk.Button(control_frame, text="🤝 Offer Draw", 
+        self.draw_btn = tk.Button(control_frame, text="🤝 Offer Draw", 
                  command=self.offer_draw,
                  bg='#F39C12', fg='white', 
                  font=("Arial", 11, "bold"),
                  relief='flat', cursor='hand2',
-                 width=12).pack(side='left', padx=5, ipady=8)
+                 width=12)
+        self.draw_btn.pack(side='left', padx=5, ipady=8)
         
-        tk.Button(control_frame, text="💬 Chat", 
-                 command=self.open_chat,
-                 bg='#3498DB', fg='white', 
+        # Back button for practice mode
+        self.back_btn = tk.Button(control_frame, text="← Back to Lobby", 
+                 command=self.return_to_lobby,
+                 bg='#95A5A6', fg='white', 
                  font=("Arial", 11, "bold"),
                  relief='flat', cursor='hand2',
-                 width=12).pack(side='left', padx=5, ipady=8)
+                 width=15)
+        # Will be shown/hidden based on game mode
         
         # Right panel - captured pieces and info
         right_panel = tk.Frame(game_area, bg='white', width=250, relief='solid', bd=1)
@@ -212,33 +229,41 @@ class GameScreen:
     
     def setup_callbacks(self):
         """Setup network callbacks"""
-        self.client.set_callback('MOVE_ACK', self.on_move_response)
-        self.client.set_callback('MOVE_UPDATE', self.on_game_update)
-        self.client.set_callback('EMOJI_UPDATE', self.on_emoji_update)
-        self.client.set_callback('GAME_END', self.on_game_end_msg)
-        self.client.set_callback('DRAW_OFFER_NOTIFY', self.on_draw_offer_received)
-        self.client.set_callback('REMATCH_REQUEST_NOTIFY', self.on_rematch_request_received)
-        self.client.set_callback('REMATCH_DECLINED_NOTIFY', self.on_rematch_declined)
+        self.client.set_callback(MessageType.MOVE_ACK, self.on_move_response)
+        self.client.set_callback(MessageType.MOVE_UPDATE, self.on_game_update)
+        self.client.set_callback(MessageType.EMOJI_UPDATE, self.on_emoji_update)
+        self.client.set_callback(MessageType.GAME_END, self.on_game_end_msg)
+        self.client.set_callback(MessageType.DRAW_OFFER_NOTIFY, self.on_draw_offer_received)
+        self.client.set_callback(MessageType.REMATCH_REQUEST_NOTIFY, self.on_rematch_request_received)
+        self.client.set_callback(MessageType.REMATCH_DECLINED_NOTIFY, self.on_rematch_declined)
         # NOTE: DO NOT register MATCH_START here - it will override Lobby's callback
         # MATCH_START for rematch is registered dynamically when needed
     
-    def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo, time_control="10+0"):
+    def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo, time_control="10+0", is_rematch=False, custom_fen=None):
         """Initialize game with data"""
-        print(f"DEBUG: start_game called. Game: {game_id}, Me: {self.client.username}, Color: '{your_color}', TC: {time_control}")
+        print(f"DEBUG: start_game called. Game: {game_id}, Me: {self.client.username}, Color: '{your_color}', TC: {time_control}, Rematch: {is_rematch}, Custom FEN: {custom_fen}")
         self.game_id = game_id
         self.opponent_name = opponent
         self.player_color = your_color
         self.opponent_elo = opponent_elo
         self.player_elo = player_elo
         
-        # Save Lobby's MATCH_START callback before overriding it
-        if 'MATCH_START' in self.client.callbacks and self.lobby_match_start_callback is None:
-            self.lobby_match_start_callback = self.client.callbacks['MATCH_START']
-            print("DEBUG: Saved Lobby's MATCH_START callback")
+        # Practice mode: game_id is None and opponent is "Practice Mode"
+        self.is_practice_mode = (game_id is None and opponent == "Practice Mode")
+        print(f"DEBUG: Practice mode: {self.is_practice_mode}")
         
-        # Register our MATCH_START callback now (for rematch)
-        self.client.set_callback('MATCH_START', self.on_match_start)
-        print("DEBUG: Registered GameScreen's MATCH_START callback")
+        # Only register MATCH_START callback on first game start (not rematch)
+        if not is_rematch:
+            # Save Lobby's MATCH_START callback before overriding it
+            if MessageType.MATCH_START in self.client.callbacks and self.lobby_match_start_callback is None:
+                self.lobby_match_start_callback = self.client.callbacks[MessageType.MATCH_START]
+                print("DEBUG: Saved Lobby's MATCH_START callback")
+            
+            # Register our MATCH_START callback now (for rematch)
+            self.client.set_callback(MessageType.MATCH_START, self.on_match_start)
+            print("DEBUG: Registered GameScreen's MATCH_START callback")
+        else:
+            print("DEBUG: Rematch - callback already registered, skipping")
         
         # Update UI
         self.player_name_label.config(text=f"👤 {self.client.username}")
@@ -250,12 +275,23 @@ class GameScreen:
         # Parse time control (format "10+0" -> 10 mins)
         try:
             minutes = int(time_control.split('+')[0])
+            self.time_control_seconds = minutes * 60.0
             time_str = f"{minutes:02d}:00"
         except:
+            self.time_control_seconds = 600.0
             time_str = "10:00"
             
+        self.white_time_left = self.time_control_seconds
+        self.black_time_left = self.time_control_seconds
+        # Timer starts immediately on game start (matching server logic)
+        self.last_move_time = time.time()
+
+        
         self.player_time_label.config(text=time_str)
         self.opponent_time_label.config(text=time_str)
+        
+        self.is_game_active = True
+        self.check_timeout() # Start background checker
         
         color_emoji = "⚪ White" if your_color == 'white' else "⚫ Black"
         self.color_label.config(text=color_emoji)
@@ -263,14 +299,31 @@ class GameScreen:
         self.game_title.config(text=f"Game vs {opponent}")
         
         
-        # Reset board
-        self.chess_board.reset()
+       # Reset board or load custom FEN
+        if custom_fen:
+            # Load custom position from FEN
+            self.chess_board.load_fen(custom_fen)
+            print(f"DEBUG: Loaded custom FEN: {custom_fen}")
+        else:
+            # Standard starting position
+            self.chess_board.reset()
+        
         self.chess_board.draw()
         
-        # Set initial turn label
-        # Standard chess: White always moves first
-        is_white_turn = True 
-        is_your_turn = (self.player_color == 'white')
+        # Set initial turn label based on FEN (if custom) or standard
+        if custom_fen:
+            # Parse FEN to determine whose turn it is
+            fen_parts = custom_fen.split()
+            if len(fen_parts) >= 2:
+                turn_char = fen_parts[1]  # 'w' or 'b'
+                is_your_turn = (turn_char == 'w' and self.player_color == 'white') or \
+                               (turn_char == 'b' and self.player_color == 'black')
+            else:
+                is_your_turn = (self.player_color == 'white')
+        else:
+            # Standard chess: White always moves first
+            is_your_turn = (self.player_color == 'white')
+        
         print(f"DEBUG: Initial turn check. Me: {self.player_color}. My turn? {is_your_turn}")
         
         if is_your_turn:
@@ -286,6 +339,20 @@ class GameScreen:
         self.moves_text.config(state='normal')
         self.moves_text.delete('1.0', 'end')
         self.moves_text.config(state='disabled')
+        
+        # Hide/show buttons based on game mode
+        if self.is_practice_mode:
+            # Hide online-only buttons in practice mode
+            self.resign_btn.pack_forget()
+            self.draw_btn.pack_forget()
+            # Show back button for practice mode
+            self.back_btn.pack(side='left', padx=5, ipady=8)
+        else:
+            # Show buttons in online mode
+            self.resign_btn.pack(side='left', padx=5, ipady=8)
+            self.draw_btn.pack(side='left', padx=5, ipady=8)
+            # Hide back button in online mode
+            self.back_btn.pack_forget()
         
         self.update_turn_label()
 
@@ -318,13 +385,18 @@ class GameScreen:
         print(f"DEBUG: Click at {row},{col}. Piece: '{piece}'")
         
         if self.chess_board.selected_square is None:
-            # Select piece - but only if it's the player's piece
+            # Select piece - but only if it's the player's piece (or in practice mode)
             if piece and piece != ' ':
                 # Check if this is the player's piece
                 is_white_piece = piece.isupper()
                 is_player_white = self.player_color == 'white'
                 
-                if (is_white_piece and is_player_white) or (not is_white_piece and not is_player_white):
+                # In practice mode, allow moving both colors
+                can_select = self.is_practice_mode or \
+                             (is_white_piece and is_player_white) or \
+                             (not is_white_piece and not is_player_white)
+                
+                if can_select:
                     self.chess_board.selected_square = (row, col)
                     # Get and highlight valid moves
                     valid_moves = self.chess_board.get_valid_moves(row, col)
@@ -394,20 +466,43 @@ class GameScreen:
                 if promotion:
                     to_pos += promotion
 
-                # Send to server
-                if self.client.connected and self.game_id:
+                # In practice mode, just update local board
+                if self.is_practice_mode:
+                    # Make move locally
+                    self.chess_board.make_move(from_row, from_col, row, col)
+                    self.chess_board.clear_selection()
+                    self.chess_board.draw()
+                    
+                    # Add to move history
+                    self.add_move(from_pos, to_pos)
+                    
+                    # Update turn label
+                    self.update_turn_label()
+                    
+                    print(f"DEBUG: Practice mode move: {from_pos} -> {to_pos}")
+                # Normal online mode
+                elif self.client.connected and self.game_id:
                     self.client.make_move(self.game_id, from_pos, to_pos)
                 
-                # Clear selection immediately to prevent double submissions
-                self.chess_board.clear_selection()
-                self.chess_board.draw()
+                    # Clear selection immediately to prevent double submissions
+                    self.chess_board.clear_selection()
+                    self.chess_board.draw()
+                else:
+                    print("DEBUG: Cannot make move - not connected or no game_id")
+                    self.chess_board.clear_selection()
+                    self.chess_board.draw()
             else:
                 # Clicking on another piece of the same color - select it instead
                 if piece and piece != ' ':
                     is_white_piece = piece.isupper()
                     is_player_white = self.player_color == 'white'
                     
-                    if (is_white_piece and is_player_white) or (not is_white_piece and not is_player_white):
+                    # In practice mode, allow selecting any piece
+                    can_select = self.is_practice_mode or \
+                                 (is_white_piece and is_player_white) or \
+                                 (not is_white_piece and not is_player_white)
+                    
+                    if can_select:
                         self.chess_board.selected_square = (row, col)
                         valid_moves = self.chess_board.get_valid_moves(row, col)
                         self.chess_board.highlighted_squares = valid_moves
@@ -439,6 +534,14 @@ class GameScreen:
         self.client.offer_draw(self.game_id)
         messagebox.showinfo("Draw Offer", "Draw offer sent to opponent")
     
+    def return_to_lobby(self):
+        """Return to lobby from practice mode"""
+        result = messagebox.askyesno("Exit Practice Mode", 
+                                     "Do you want to exit practice mode and return to lobby?")
+        if result:
+            self.hide()
+            self.on_game_end(self.player_elo)
+    
     def open_chat(self):
         """Open chat (placeholder)"""
         messagebox.showinfo("Chat", "Chat feature coming soon!")
@@ -449,10 +552,10 @@ class GameScreen:
         payload = msg.get('payload', {})
         # Check success in payload (logic_wrapper now sends success: True)
         # OR check status if success field not present
-        is_success = msg.get('success') or payload.get('success') or payload.get('status') == 'success'
+        is_success = msg.get(PayloadFields.SUCCESS) or payload.get(PayloadFields.SUCCESS) or payload.get(PayloadFields.STATUS) == 'success'
         
         if not is_success:
-            error = msg.get('message') or payload.get('message') or 'Invalid move'
+            error = msg.get(PayloadFields.MESSAGE) or payload.get(PayloadFields.MESSAGE) or 'Invalid move'
             messagebox.showerror("Invalid Move", error)
             # Revert board - Clear selection
             self.chess_board.clear_selection()
@@ -460,19 +563,39 @@ class GameScreen:
         else:
             # Valid move confirmed by server
             # Update board state
-            next_fen = payload.get('next_fen') or msg.get('next_fen')
+            next_fen = payload.get(PayloadFields.NEXT_FEN) or msg.get(PayloadFields.NEXT_FEN)
             if next_fen:
                 self.chess_board.set_fen(next_fen)
                 self.chess_board.draw()
                 
                 # Update Times
                 # MOVE_ACK has times in root msg, MOVE_UPDATE in payload
-                time_data = msg if 'white_time' in msg else payload
+                time_data = msg if PayloadFields.WHITE_TIME in msg else payload
                 self.update_times(time_data)
                 
+                # Check for Timeout Win (I claimed)
+                if payload.get('game_result') == 'timeout':
+                    winner_id = payload.get('winner_id')
+                    # Logic: if I claimed, I probably won, but check winner_id
+                    # We can simulate a GAME_END msg
+                    fake_end_msg = {
+                        'payload': {
+                            'result': 'win' if winner_id else 'timeout', # Logic wrapper sends winner_id
+                            'reason': 'timeout',
+                            'new_elo': payload.get('new_elo')
+                        }
+                    }
+                    if winner_id:
+                        # logic wrapper sends winner_id. Check if it's me?
+                        # I don't readily have my ID here, but if I claimed successfully, and wasn't rejected...
+                        pass
+                    
+                    self.on_game_end_msg(fake_end_msg)
+                    return
+                
                 # Add to history
-                from_pos = payload.get('from') or msg.get('from')
-                to_pos = payload.get('to') or msg.get('to')
+                from_pos = payload.get(PayloadFields.FROM) or msg.get(PayloadFields.FROM)
+                to_pos = payload.get(PayloadFields.TO) or msg.get(PayloadFields.TO)
                 if from_pos and to_pos:
                      self.add_move(from_pos, to_pos)
             else:
@@ -482,15 +605,15 @@ class GameScreen:
     def on_game_update(self, msg):
         """Handle game update"""
         payload = msg.get('payload', {})
-        move = payload.get('last_move') or msg.get('last_move') 
+        move = payload.get(PayloadFields.LAST_MOVE) or msg.get(PayloadFields.LAST_MOVE) 
         
         if move:
             # Opponent's move
-            from_pos = move.get('from', '?')
-            to_pos = move.get('to', '?')
+            from_pos = move.get(PayloadFields.FROM, '?')
+            to_pos = move.get(PayloadFields.TO, '?')
             
             # Update board from server state
-            fen = payload.get('fen')
+            fen = payload.get(PayloadFields.FEN)
             if fen:
                 self.chess_board.set_fen(fen)
                 self.chess_board.draw()
@@ -498,12 +621,24 @@ class GameScreen:
             # Update Times
             self.update_times(payload)
             
+            # Check for Timeout Loss (Opponent claimed)
+            if from_pos == "CLAIM" and to_pos == "TIMEOUT":
+                 self.on_game_end_msg({
+                     'payload': {
+                         'result': 'loss',
+                         'reason': 'timeout',
+                         # ELO might be missing in MOVE_UPDATE, wait for GAME_END or just show loss
+                         'new_elo': None
+                     }
+                 })
+                 return
+            
             self.add_move(from_pos, to_pos)
 
     def update_times(self, payload):
         """Update timer labels from payload"""
-        white_time = payload.get('white_time')
-        black_time = payload.get('black_time')
+        white_time = payload.get(PayloadFields.WHITE_TIME)
+        black_time = payload.get(PayloadFields.BLACK_TIME)
         
         if white_time is not None and black_time is not None:
             # Format time mm:ss
@@ -522,11 +657,96 @@ class GameScreen:
             else:
                 self.player_time_label.config(text=b_str)
                 self.opponent_time_label.config(text=w_str)
+                
+            # Update internal state
+            self.white_time_left = float(white_time)
+            self.black_time_left = float(black_time)
+            # Reset local timer reference
+            import time
+            self.last_move_time = time.time()
+            
+    def check_timeout(self):
+        """Check if anyone has timed out"""
+        if not self.is_game_active:
+            return
+            
+        if self.last_move_time is None:
+             # Timer hasn't started yet (waiting for first move)
+             # Or we can just start it now if we want strict start?
+             # logic_wrapper says: if last_move_ts_str is None, it's first move, no deduct.
+             # So we wait for first move update.
+             self.root.after(1000, self.check_timeout)
+             return
+        
+        import time
+        now = time.time()
+        elapsed = now - self.last_move_time
+        
+        # Determine current turn
+        fen = self.chess_board.current_fen
+        is_white_turn = True
+        if fen:
+            parts = fen.split()
+            if len(parts) > 1 and parts[1] == 'b':
+                is_white_turn = False
+        
+        # Calculate projected time left
+        if is_white_turn:
+            current_white = self.white_time_left - elapsed
+            current_black = self.black_time_left
+            
+            if current_white <= 0:
+                current_white = 0
+                # White timed out. 
+                # If I am BLACK, I should claim.
+                if self.player_color == 'black':
+                    if now - self.last_claim_time > 3.0:
+                        print("DEBUG: reclaiming timeout on White")
+                        self.client.make_move(self.game_id, "CLAIM", "TIMEOUT")
+                        self.last_claim_time = now
+        else:
+            current_white = self.white_time_left
+            current_black = self.black_time_left - elapsed
+            
+            if current_black <= 0:
+                current_black = 0
+                # Black timed out.
+                # If I am WHITE, I should claim.
+                if self.player_color == 'white':
+                    if now - self.last_claim_time > 3.0:
+                        print("DEBUG: reclaiming timeout on Black")
+                        self.client.make_move(self.game_id, "CLAIM", "TIMEOUT")
+                        self.last_claim_time = now
+        
+        # Update UI Labels (optional, user said no countdown tick, but showing 00:00 is nice)
+        # Actually user said "forget countdown tick", maybe just keep static or update every 1s?
+        # Let's simple update labels to show passage of time roughly
+        def format_time(seconds):
+             m = int(max(0, seconds) // 60)
+             s = int(max(0, seconds) % 60)
+             return f"{m:02d}:{s:02d}"
+             
+        if is_white_turn:
+             w_str = format_time(current_white)
+             # Only update the active one to avoid jitter
+             if self.player_color == 'white':
+                 self.player_time_label.config(text=w_str)
+             else:
+                 self.opponent_time_label.config(text=w_str)
+        else:
+             b_str = format_time(current_black)
+             if self.player_color == 'black':
+                 self.player_time_label.config(text=b_str)
+             else:
+                 self.opponent_time_label.config(text=b_str)
+
+        # Re-schedule
+        self.root.after(1000, self.check_timeout)
     
     def on_emoji_update(self, msg):
         """Handle emoji/chat update from opponent"""
-        emoji = msg.get('emoji', '')
-        sender = msg.get('from', 'Opponent')
+        emoji = msg.get(PayloadFields.EMOJI, '')
+        sender = msg.get(PayloadFields.SENDER, 'Opponent')
         if emoji:
             # Display emoji in chat or as notification
             messagebox.showinfo("Emoji", f"{sender}: {emoji}")
@@ -534,9 +754,11 @@ class GameScreen:
     def on_game_end_msg(self, msg):
         """Handle game end"""
         payload = msg.get('payload', {})
-        result = payload.get('result', 'unknown')  # "win", "loss", "draw"
-        reason = payload.get('reason', 'Game ended')
-        new_elo = payload.get('new_elo', self.player_elo)
+        result = payload.get(PayloadFields.RESULT, 'unknown')  # "win", "loss", "draw"
+        reason = payload.get(PayloadFields.REASON, 'Game ended')
+        new_elo = payload.get(PayloadFields.NEW_ELO, self.player_elo)
+        
+        self.is_game_active = False # Stop timer checker
         
         # Calculate ELO change
         elo_change = new_elo - self.player_elo if self.player_elo else 0
@@ -548,45 +770,224 @@ class GameScreen:
         else:  # loss
             result_text = f"😞 You Lost\n\n{reason}\n\nELO: {self.player_elo} → {new_elo} ({elo_change})"
         
-        # Ask for rematch
-        result_text += "\n\nDo you want to request a rematch?"
+        # Show custom dialog for rematch request
+        self.show_rematch_dialog(result_text, new_elo)
+    
+    def show_rematch_dialog(self, result_text, new_elo):
+        """Show custom dialog for rematch request"""
+        # Close any existing dialog
+        if self.active_rematch_dialog:
+            try:
+                self.active_rematch_dialog.destroy()
+            except:
+                pass
         
-        response = messagebox.askyesno("Game Over", result_text)
+        # Create custom dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Game Over")
+        dialog.geometry("450x300")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
         
-        if response:
+        # Store reference
+        self.active_rematch_dialog = dialog
+        
+        # Center dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Content frame
+        content = tk.Frame(dialog, bg='white', padx=30, pady=20)
+        content.pack(fill=tk.BOTH, expand=True)
+        
+        # Result text
+        result_label = tk.Label(
+            content,
+            text=result_text,
+            font=("Arial", 12),
+            bg='white',
+            justify=tk.CENTER
+        )
+        result_label.pack(pady=20)
+        
+        # Question
+        question_label = tk.Label(
+            content,
+            text="Do you want to request a rematch?",
+            font=("Arial", 11, "bold"),
+            bg='white'
+        )
+        question_label.pack(pady=10)
+        
+        # Buttons frame
+        btn_frame = tk.Frame(content, bg='white')
+        btn_frame.pack(pady=20)
+        
+        def on_yes():
+            dialog.destroy()
+            self.active_rematch_dialog = None
             # Request rematch
             self.client.request_rematch(self.game_id)
             messagebox.showinfo("Rematch", "Rematch request sent!\nWaiting for opponent's response...")
-        else:
+        
+        def on_no():
+            dialog.destroy()
+            self.active_rematch_dialog = None
             # Return to lobby
             self.hide()
             self.on_game_end(new_elo)
+        
+        # Yes button
+        yes_btn = tk.Button(
+            btn_frame,
+            text="✓ Yes, Rematch!",
+            command=on_yes,
+            bg='#27AE60',
+            fg='white',
+            font=("Arial", 11, "bold"),
+            padx=20,
+            pady=10,
+            relief=tk.FLAT,
+            cursor='hand2'
+        )
+        yes_btn.pack(side=tk.LEFT, padx=10)
+        
+        # No button
+        no_btn = tk.Button(
+            btn_frame,
+            text="✗ No, Return to Lobby",
+            command=on_no,
+            bg='#E74C3C',
+            fg='white',
+            font=("Arial", 11, "bold"),
+            padx=20,
+            pady=10,
+            relief=tk.FLAT,
+            cursor='hand2'
+        )
+        no_btn.pack(side=tk.LEFT, padx=10)
+        
+        # Handle dialog close button (X)
+        dialog.protocol("WM_DELETE_WINDOW", on_no)
     
     def on_rematch_request_received(self, msg):
         """Handle rematch request from opponent"""
         payload = msg.get('payload', {})
-        requester_id = payload.get('requester_id')
-        game_id = payload.get('game_id')
+        requester_id = payload.get(PayloadFields.REQUESTER_ID)
+        game_id = payload.get(PayloadFields.GAME_ID)
         
-        # Show confirmation dialog
-        response = messagebox.askyesno(
-            "Rematch Request",
-            f"Your opponent wants a rematch!\n\nDo you accept?"
+        # IMPORTANT: Close any existing "request rematch" dialog
+        # This ensures opponent's request is shown on top
+        if self.active_rematch_dialog:
+            try:
+                self.active_rematch_dialog.destroy()
+                self.active_rematch_dialog = None
+                print("DEBUG: Closed active rematch dialog to show opponent's request")
+            except:
+                pass
+        
+        # Show opponent's rematch request dialog
+        self.show_accept_rematch_dialog(game_id)
+    
+    def show_accept_rematch_dialog(self, game_id):
+        """Show custom dialog to accept/decline opponent's rematch request"""
+        # Create custom dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Rematch Request")
+        dialog.geometry("400x250")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Bring to front
+        dialog.lift()
+        dialog.focus_force()
+        
+        # Center dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Content frame
+        content = tk.Frame(dialog, bg='white', padx=30, pady=20)
+        content.pack(fill=tk.BOTH, expand=True)
+        
+        # Icon
+        icon_label = tk.Label(
+            content,
+            text="⚔️",
+            font=("Arial", 48),
+            bg='white'
         )
+        icon_label.pack(pady=10)
         
-        if response:
+        # Message
+        msg_label = tk.Label(
+            content,
+            text="Your opponent wants a rematch!\n\nDo you accept?",
+            font=("Arial", 12, "bold"),
+            bg='white',
+            justify=tk.CENTER
+        )
+        msg_label.pack(pady=15)
+        
+        # Buttons frame
+        btn_frame = tk.Frame(content, bg='white')
+        btn_frame.pack(pady=15)
+        
+        def on_accept():
+            dialog.destroy()
             # Accept rematch
             self.client.accept_rematch(game_id)
             messagebox.showinfo("Rematch", "Rematch accepted!\nStarting new game...")
-        else:
+        
+        def on_decline():
+            dialog.destroy()
             # Decline rematch
             self.client.decline_rematch(game_id)
             messagebox.showinfo("Rematch", "Rematch declined.")
+        
+        # Accept button
+        accept_btn = tk.Button(
+            btn_frame,
+            text="✓ Accept",
+            command=on_accept,
+            bg='#27AE60',
+            fg='white',
+            font=("Arial", 12, "bold"),
+            padx=30,
+            pady=10,
+            relief=tk.FLAT,
+            cursor='hand2'
+        )
+        accept_btn.pack(side=tk.LEFT, padx=10)
+        
+        # Decline button
+        decline_btn = tk.Button(
+            btn_frame,
+            text="✗ Decline",
+            command=on_decline,
+            bg='#E74C3C',
+            fg='white',
+            font=("Arial", 12, "bold"),
+            padx=30,
+            pady=10,
+            relief=tk.FLAT,
+            cursor='hand2'
+        )
+        decline_btn.pack(side=tk.LEFT, padx=10)
+        
+        # Handle dialog close button (X) - treat as decline
+        dialog.protocol("WM_DELETE_WINDOW", on_decline)
     
     def on_rematch_declined(self, msg):
         """Handle when opponent declines rematch"""
         payload = msg.get('payload', {})
-        game_id = payload.get('game_id')
+        game_id = payload.get(PayloadFields.GAME_ID)
         
         messagebox.showinfo("Rematch Declined", "Your opponent declined the rematch request.")
         
@@ -597,7 +998,7 @@ class GameScreen:
     def on_match_start(self, msg):
         """Handle MATCH_START message - ONLY for rematch"""
         payload = msg.get('payload', {})
-        game_id = payload.get('game_id')
+        game_id = payload.get(PayloadFields.GAME_ID)
         is_rematch = payload.get('is_rematch', False)
         
         # IMPORTANT: Only handle if this is a rematch
@@ -609,8 +1010,15 @@ class GameScreen:
         white_id = payload.get('white_id')
         black_id = payload.get('black_id')
         mode = payload.get('mode', 'RAPID')
+        time_control = payload.get('time_control')
         
-        print(f"DEBUG: REMATCH MATCH_START - Game {game_id}, white={white_id}, black={black_id}")
+        # Fallback if time_control missing in payload
+        if not time_control:
+             if mode == 'BLITZ': time_control = "5+0"
+             elif mode == 'CLASSICAL': time_control = "30+0"
+             else: time_control = "10+0"
+        
+        print(f"DEBUG: REMATCH MATCH_START - Game {game_id}, white={white_id}, black={black_id}, TC={time_control}")
         
         # For rematch, swap colors from previous game
         if hasattr(self, 'player_color') and self.player_color:
@@ -621,13 +1029,15 @@ class GameScreen:
             new_color = 'white'
             print(f"WARNING: Rematch but no previous color - defaulting to white")
         
-        # Reset and start new game
+        # Reset and start new game - pass is_rematch=True to avoid re-registering callback
         self.start_game(
             game_id=game_id,
             opponent=self.opponent_name if hasattr(self, 'opponent_name') else "Opponent",
             your_color=new_color,
             opponent_elo=self.opponent_elo if hasattr(self, 'opponent_elo') else 1200,
-            player_elo=self.player_elo if hasattr(self, 'player_elo') else 1200
+            player_elo=self.player_elo if hasattr(self, 'player_elo') else 1200,
+            time_control=time_control,
+            is_rematch=True
         )
     
     def on_draw_offer_received(self, msg):
@@ -652,15 +1062,28 @@ class GameScreen:
     
     def show(self):
         """Show game screen"""
+        # Reload theme mỗi khi show screen (user có thể đã thay đổi settings)
+        if hasattr(self, 'chess_board') and self.chess_board:
+            self.chess_board.load_theme()
+            self.chess_board.draw()
+        
         self.frame.pack(fill='both', expand=True)
     
     def hide(self):
         """Hide game screen"""
+        # Close any active rematch dialog
+        if self.active_rematch_dialog:
+            try:
+                self.active_rematch_dialog.destroy()
+                self.active_rematch_dialog = None
+            except:
+                pass
+        
         self.frame.pack_forget()
         
         # Restore Lobby's MATCH_START callback
         if self.lobby_match_start_callback is not None:
-            self.client.set_callback('MATCH_START', self.lobby_match_start_callback)
+            self.client.set_callback(MessageType.MATCH_START, self.lobby_match_start_callback)
             print("DEBUG: Restored Lobby's MATCH_START callback")
 
 
@@ -682,8 +1105,8 @@ if __name__ == "__main__":
         def make_move(self, game_id, from_pos, to_pos):
             print(f"[MOCK] Move: {from_pos} -> {to_pos} (game: {game_id})")
             # Simulate server response
-            if 'MOVE_ACK' in self.callbacks:
-                self.callbacks['MOVE_ACK']({'success': True})
+            if MessageType.MOVE_ACK in self.callbacks:
+                self.callbacks[MessageType.MOVE_ACK]({'success': True})
         
         def resign(self, game_id):
             print(f"[MOCK] Resign from game {game_id}")

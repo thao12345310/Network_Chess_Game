@@ -69,10 +69,11 @@ def insert_move(game_id, player_id, move_notation):
     conn.close()
 
 
-def create_game(white_id, black_id, mode='RAPID', time_limit=None):
+def create_game(white_id, black_id, mode='RAPID', time_limit=None, custom_fen=None):
     """
     Create a new game with specified mode and time limit.
     time_limit should be in seconds. If not provided, defaults based on mode.
+    custom_fen: Optional FEN string for custom board setup (for practice mode)
     """
     import datetime
     
@@ -81,9 +82,13 @@ def create_game(white_id, black_id, mode='RAPID', time_limit=None):
         mode_times = {
             "BLITZ": 300.0,      # 5 mins
             "RAPID": 600.0,      # 10 mins
-            "CLASSICAL": 1800.0  # 30 mins
+            "CLASSICAL": 1800.0, # 30 mins
+            "PRACTICE": None     # No time limit for practice
         }
         time_limit = mode_times.get(mode.upper(), 600.0)
+    
+    # Use custom FEN if provided, otherwise use standard starting position
+    initial_fen = custom_fen if custom_fen else INITIAL_FEN
     
     conn = get_connection()
     cur = conn.cursor()
@@ -94,7 +99,7 @@ def create_game(white_id, black_id, mode='RAPID', time_limit=None):
         INSERT INTO Game (white_id, black_id, mode, white_time, black_time, last_move_time, status, start_time, current_fen)
         VALUES (?, ?, ?, ?, ?, ?, 'ONGOING', ?, ?)
         """,
-        (white_id, black_id, mode, time_limit, time_limit, now_ts, start_time, INITIAL_FEN)
+        (white_id, black_id, mode, time_limit, time_limit, now_ts, start_time, initial_fen)
     )
     game_id = cur.lastrowid
     conn.commit()

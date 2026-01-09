@@ -439,6 +439,76 @@ def main():
                 
                 # Convert format: "e2" + "e4" → "e2e4" (UCI format)
                 move_uci = from_pos + to_pos
+
+                # SPECIAL: Check for Timeout Claim
+                if from_pos == "CLAIM" and to_pos == "TIMEOUT":
+                    # Determine turn - reusing logic:
+                    if not current_fen:
+                         current_fen = get_game_info(game_id_int)[8]
+                    
+                    is_white_turn = True
+                    if current_fen:
+                        parts = current_fen.split()
+                        if len(parts) > 1 and parts[1] == 'b':
+                            is_white_turn = False
+                    
+                    # Validate if time is actually up
+                    time_left = white_time if is_white_turn else black_time
+                    
+                    # Add buffer (e.g. 5.0s) to prevent rejection due to latency
+                    # Client sees 0, Server might see 2.0s left. We trust claim if it's close.
+                    if time_left <= 5.0: 
+                        timeout_winner = black_id if is_white_turn else white_id
+                        
+                        update_game_time(game_id_int, white_time, black_time, str(now))
+                        update_game_result(
+                            game_id_int,
+                            timeout_winner,
+                            'FINISHED',
+                            datetime.datetime.utcnow().isoformat()
+                        )
+                        
+                        # ELO Update for Timeout
+                        white_rating = get_player_rating(white_id)
+                        black_rating = get_player_rating(black_id)
+                        score_white = 1.0 if timeout_winner == white_id else 0.0
+                        new_white_elo, new_black_elo = calculate_elo(white_rating, black_rating, score_white)
+                        update_both_players_elo(white_id, new_white_elo, black_id, new_black_elo)
+
+                        response = {
+                            "messageType": "MOVE_ACK",
+                            "status": "success",
+                            "success": True,
+                            "is_valid": False,
+                            "message": "Timeout Confirmed",
+                            "game_result": "timeout",
+                            "winner_id": timeout_winner,
+                            "white_time": white_time,
+                            "black_time": black_time,
+                            "from": "CLAIM",
+                            "to": "TIMEOUT",
+                            "opponent_id": timeout_winner # The winner is the one who claimed or the opponent of the timed-out player
+                        }
+                        if timeout_winner:
+                             response['new_white_elo'] = new_white_elo
+                             response['new_black_elo'] = new_black_elo
+                             response['white_id'] = white_id
+                             response['black_id'] = black_id
+                            
+                        print(json.dumps(response))
+                        return
+                    else:
+                         # Claim rejected - time not up
+                         response = {
+                            "messageType": "MOVE_ACK",
+                            "status": "error",
+                            "success": False,
+                            "message": f"Timeout claim rejected. Time left: {time_left:.1f}s",
+                            "white_time": white_time,
+                            "black_time": black_time
+                        }
+                         print(json.dumps(response))
+                         return
                 
                 # Validate move
                 is_valid, next_fen = validate_move(current_fen, move_uci)

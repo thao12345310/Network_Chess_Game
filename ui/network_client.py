@@ -9,6 +9,7 @@ import ctypes
 import json
 import threading
 from pathlib import Path
+from protocol_constants import MessageType
 
 
 # Linux shared library name
@@ -188,10 +189,10 @@ class ChessClient:
             # Handle both login and register responses
             if msg_type in self.callbacks:
                 self.callbacks[msg_type](msg)
-            elif 'AUTH_LOGIN_ACK' in self.callbacks and 'AUTH' in msg_type:
-                self.callbacks['AUTH_LOGIN_ACK'](msg)
-            elif 'AUTH_REGISTER_ACK' in self.callbacks and 'AUTH' in msg_type:
-                self.callbacks['AUTH_REGISTER_ACK'](msg)
+            elif MessageType.AUTH_LOGIN_ACK in self.callbacks and 'AUTH' in msg_type:
+                self.callbacks[MessageType.AUTH_LOGIN_ACK](msg)
+            elif MessageType.AUTH_REGISTER_ACK in self.callbacks and 'AUTH' in msg_type:
+                self.callbacks[MessageType.AUTH_REGISTER_ACK](msg)
             else:
                 print(f"WARNING: No callback registered for message type: {msg_type}")
         except Exception as e:
@@ -221,10 +222,10 @@ class ChessClient:
             msg = json.loads(json_msg.decode('utf-8'))
             msg_type = msg.get('messageType', '')
             
-            if msg_type == 'LOBBY_LIST' and 'LOBBY_LIST' in self.callbacks:
-                self.callbacks['LOBBY_LIST'](msg)
-            elif msg_type == 'LEADERBOARD' and 'LEADERBOARD' in self.callbacks:
-                self.callbacks['LEADERBOARD'](msg.get('payload', {}))
+            if msg_type == MessageType.LOBBY_LIST and MessageType.LOBBY_LIST in self.callbacks:
+                self.callbacks[MessageType.LOBBY_LIST](msg)
+            elif msg_type == MessageType.LEADERBOARD and MessageType.LEADERBOARD in self.callbacks:
+                self.callbacks[MessageType.LEADERBOARD](msg.get('payload', {}))
         except Exception as e:
             print(f"Player list callback error: {e}")
     
@@ -236,8 +237,8 @@ class ChessClient:
             print(f"DEBUG: Challenge callback received: {msg_type}")
             if msg_type in self.callbacks:
                 self.callbacks[msg_type](msg)
-            elif 'CHALLENGE_NOTIFY' in self.callbacks:
-                self.callbacks['CHALLENGE_NOTIFY'](msg)
+            elif MessageType.CHALLENGE_NOTIFY in self.callbacks:
+                self.callbacks[MessageType.CHALLENGE_NOTIFY](msg)
         except Exception as e:
             print(f"Challenge callback error: {e}")
     
@@ -245,8 +246,8 @@ class ChessClient:
         """Handle error from C++"""
         try:
             error_str = error_msg.decode('utf-8')
-            if 'ERROR' in self.callbacks:
-                self.callbacks['ERROR']({'error': error_str})
+            if MessageType.ERROR in self.callbacks:
+                self.callbacks[MessageType.ERROR]({'error': error_str})
             print(f"C++ Client Error: {error_str}")
         except Exception as e:
             print(f"Error callback error: {e}")

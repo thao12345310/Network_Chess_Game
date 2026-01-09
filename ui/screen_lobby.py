@@ -7,19 +7,23 @@ Lobby Screen - Danh sách người chơi và challenge
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 from datetime import datetime
+from protocol_constants import MessageType, ResponseCode, PayloadFields
+from protocol_schemas import MatchStartPayload, safe_get_payload, safe_get_players
 
 
 class LobbyScreen:
     """Màn hình lobby - Tìm đối thủ và xử lý challenge"""
     
-    def __init__(self, root, client, player_elo, on_game_start, on_view_leaderboard, on_logout=None, on_view_game_history=None):
+    def __init__(self, root, client, player_elo, on_game_start, on_view_leaderboard, on_logout=None, on_view_game_history=None, on_settings=None, on_board_setup=None):
         self.root = root
         self.client = client
         self.player_elo = player_elo
         self.on_game_start = on_game_start
         self.on_view_leaderboard = on_view_leaderboard
         self.on_logout = on_logout
+        self.on_settings = on_settings
         self.on_view_game_history = on_view_game_history
+        self.on_board_setup = on_board_setup
         
         self.players_data = []
         
@@ -117,6 +121,15 @@ class LobbyScreen:
                                          width=20)
         self.leaderboard_btn.pack(pady=10, padx=20, ipady=10)
         
+        # Settings button
+        if self.on_settings:
+            self.settings_btn = tk.Button(left_panel, text="⚙️ Board Settings", 
+                                          command=self.on_settings,
+                                          bg='#9B59B6', fg='white', 
+                                          font=("Arial", 12, "bold"),
+                                          relief='flat', cursor='hand2',
+                                          width=20)
+            self.settings_btn.pack(pady=10, padx=20, ipady=10)
         # Game History button
         if self.on_view_game_history:
             self.history_btn = tk.Button(left_panel, text="📜 Game History", 
@@ -126,6 +139,16 @@ class LobbyScreen:
                                          relief='flat', cursor='hand2',
                                          width=20)
             self.history_btn.pack(pady=10, padx=20, ipady=10)
+        
+        # Board Setup button (Practice mode)
+        if self.on_board_setup:
+            self.board_setup_btn = tk.Button(left_panel, text="♟️ Custom Board Setup", 
+                                             command=self.on_board_setup,
+                                             bg='#16A085', fg='white', 
+                                             font=("Arial", 12, "bold"),
+                                             relief='flat', cursor='hand2',
+                                             width=20)
+            self.board_setup_btn.pack(pady=10, padx=20, ipady=10)
         
         # Refresh players
         self.refresh_btn = tk.Button(left_panel, text="🔄 Refresh Players", 
@@ -214,12 +237,12 @@ class LobbyScreen:
     
     def setup_callbacks(self):
         """Setup network callbacks"""
-        self.client.set_callback('LOBBY_LIST', self.on_player_list)
-        self.client.set_callback('MATCH_START', self.on_game_start_msg)
+        self.client.set_callback(MessageType.LOBBY_LIST, self.on_player_list)
+        self.client.set_callback(MessageType.MATCH_START, self.on_game_start_msg)
         self.client.set_callback('MATCH_CANCEL_ACK', self.on_match_cancel_ack)
-        self.client.set_callback('CHALLENGE_NOTIFY', self.on_challenge_received)
-        self.client.set_callback('CHALLENGE_RESP', self.on_challenge_response)
-        self.client.set_callback('ERROR', self.on_error_response)
+        self.client.set_callback(MessageType.CHALLENGE_NOTIFY, self.on_challenge_received)
+        self.client.set_callback(MessageType.CHALLENGE_RESP, self.on_challenge_response)
+        self.client.set_callback(MessageType.ERROR, self.on_error_response)
     
     def refresh_players(self):
         """Refresh player list"""
@@ -237,15 +260,15 @@ class LobbyScreen:
         self.players_listbox.delete(0, 'end')
         
         for player in self.players_data:
-            username = player.get('username', '')
+            username = player.get(PayloadFields.USERNAME, '')
             if search_text in username.lower():
                 self.display_player(player)
     
     def display_player(self, player):
         """Display single player in listbox"""
-        username = player.get('username', 'Unknown')
-        elo = player.get('elo', 1200)
-        status = player.get('status', 'online')
+        username = player.get(PayloadFields.USERNAME, 'Unknown')
+        elo = player.get(PayloadFields.ELO, 1200)
+        status = player.get(PayloadFields.STATUS, 'online')
         
         if username == self.client.username:
             return
@@ -462,12 +485,12 @@ class LobbyScreen:
         """Handle player list update"""
         print(f"DEBUG: on_player_list received: {msg}")
         payload = msg.get('payload', {})
-        players = payload.get('players', [])
+        players = payload.get(PayloadFields.PLAYERS, [])
         print(f"DEBUG: Players data: {players}")
         
         # Convert to list of dicts if it's just names
         if players and isinstance(players[0], str):
-            self.players_data = [{'username': name, 'elo': 1200, 'status': 'online'} 
+            self.players_data = [{PayloadFields.USERNAME: name, PayloadFields.ELO: 1200, PayloadFields.STATUS: 'online'} 
                                 for name in players]
         else:
             self.players_data = players
@@ -500,41 +523,53 @@ class LobbyScreen:
         if self.is_searching:
             self.cleanup_matching()
         
-        payload = msg.get('payload', {})
-        game_id = payload.get('game_id')
-        opponent_id = payload.get('opponent_id')
-        your_color = payload.get('your_color', 'white')
-        opponent_elo = payload.get('opponent_elo', 1200)
-        time_control = payload.get('time_control', '10+0')
         
-        # Look up opponent username from players_data
-        opponent = f"Player {opponent_id}"
-        for player in self.players_data:
-            if player.get('player_id') == opponent_id:
-                opponent = player.get('username', opponent)
-                opponent_elo = player.get('elo', 1200)
-                break
+        # Try to use typed payload first
+        payload = safe_get_payload(msg, MatchStartPayload)
         
-        self.log(f"Game starting vs {opponent}!")
-        print(f"DEBUG: Starting game - ID: {game_id}, opponent: {opponent}, color: {your_color}, TC: {time_control}")
-        self.hide()
-        self.on_game_start(game_id, opponent, your_color, opponent_elo, time_control)
+        if payload:
+            # Use typed payload - type-safe access
+            self.log(f"Game starting vs {payload.opponent_name}!")
+            print(f"DEBUG: Starting game - ID: {payload.game_id}, opponent: {payload.opponent_name}, color: {payload.your_color}, TC: {payload.time_control}")
+            self.hide()
+            self.on_game_start(payload.game_id, payload.opponent_name, payload.your_color, payload.opponent_elo, payload.time_control)
+        else:
+            # Fallback to dict access for backward compatibility
+            payload_dict = msg.get('payload', {})
+            game_id = payload_dict.get(PayloadFields.GAME_ID)
+            opponent_id = payload_dict.get(PayloadFields.OPPONENT_ID)
+            your_color = payload_dict.get(PayloadFields.YOUR_COLOR, 'white')
+            opponent_elo = payload_dict.get(PayloadFields.OPPONENT_ELO, 1200)
+            time_control = payload_dict.get(PayloadFields.TIME_CONTROL, '10+0')
+            
+            # Look up opponent username from players_data
+            opponent = f"Player {opponent_id}"
+            for player in self.players_data:
+                if player.get('player_id') == opponent_id:
+                    opponent = player.get(PayloadFields.USERNAME, opponent)
+                    opponent_elo = player.get(PayloadFields.ELO, 1200)
+                    break
+            
+            self.log(f"Game starting vs {opponent}!")
+            print(f"DEBUG: Starting game - ID: {game_id}, opponent: {opponent}, color: {your_color}, TC: {time_control}")
+            self.hide()
+            self.on_game_start(game_id, opponent, your_color, opponent_elo, time_control)
     
     def on_challenge_received(self, msg):
         """Handle incoming challenge from another player"""
         payload = msg.get('payload', {})
-        challenger_id = payload.get('challenger_id') or payload.get('from_id')
+        challenger_id = payload.get(PayloadFields.CHALLENGER_ID) or payload.get('from_id')
         
         # Find challenger username from players_data
         challenger_name = f"Player {challenger_id}"
         for player in self.players_data:
             if player.get('player_id') == challenger_id:
-                challenger_name = player.get('username', challenger_name)
+                challenger_name = player.get(PayloadFields.USERNAME, challenger_name)
                 break
         
         self.log(f"Challenge received from {challenger_name}!")
         
-        mode = payload.get('mode', 'RAPID')
+        mode = payload.get(PayloadFields.MODE, 'RAPID')
         
         # Show accept/decline dialog
         result = messagebox.askyesno(
@@ -557,9 +592,9 @@ class LobbyScreen:
         payload = msg.get('payload', {})
         
         # Check if this is actually a MATCH_START in disguise or an error
-        if payload.get('status') == 'declined':
+        if payload.get(PayloadFields.STATUS) == 'declined':
             self.log("Your challenge was declined.")
-        elif payload.get('game_id'):
+        elif payload.get(PayloadFields.GAME_ID):
             # This might be a game start disguised as CHALLENGE_RESP
             print(f"DEBUG: Found game_id in CHALLENGE_RESP, treating as game start")
             self.on_game_start_msg(msg)
@@ -570,7 +605,7 @@ class LobbyScreen:
         """Handle error response"""
         print(f"DEBUG: ERROR received: {msg}")
         payload = msg.get('payload', {})
-        reason = payload.get('reason', 'Unknown error')
+        reason = payload.get(PayloadFields.REASON, 'Unknown error')
         self.log(f"Error: {reason}")
         messagebox.showerror("Error", reason)
     

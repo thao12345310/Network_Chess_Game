@@ -1,0 +1,57 @@
+sequenceDiagram
+    autonumber
+    
+    box "Phase 1: Game Creation (Time Selection)" #e6f3ff
+        participant UI_Lobby as UI (Lobby)
+        participant User as User
+        participant Server as Server
+        participant DB as Database
+    end
+    
+    box "Phase 2: Gameplay (Timer Logic)" #fff0fe
+        participant UI_Game as UI (Game)
+        participant Logic as Server Logic
+    end
+
+    note right of User: Step 1: Select Mode
+    User->>UI_Lobby: Select "RAPID" (10 mins)
+    UI_Lobby->>UI_Lobby: game_mode.get() -> "RAPID"
+    
+    note right of User: Step 2: Create Game (Challenge/Match)
+    UI_Lobby->>Server: join_lobby(mode="RAPID") OR send_challenge(mode)
+    Server->>Logic: create_game(white, black, mode)
+    
+    activate Logic
+    Logic->>Logic: Lookup Time Limit: RAPID -> 600s
+    Logic->>DB: INSERT INTO games (white_time=600, black_time=600)
+    Logic-->>Server: Game Created (ID)
+    deactivate Logic
+    
+    Server-->>UI_Game: MATCH_START (time_control="10+0")
+    UI_Game->>UI_Game: Init Timers: White=600s, Black=600s
+
+    note right of UI_Game: Step 3: Moving & Time Deduction
+    
+    UI_Game->>UI_Game: Local Timer ticks (Visual Only)
+    
+    UI_Game->>Server: MOVE (from, to)
+    Server->>Logic: handle_move()
+    activate Logic
+    
+    Logic->>DB: get_game_time() -> (w_time, b_time, last_move_ts)
+    
+    alt If not first move
+        Logic->>Logic: elapsed = now - last_move_ts
+        Logic->>Logic: current_player_time -= elapsed
+    end
+    
+    alt Time <= 0?
+        Logic-->>Server: TIMEOUT Result
+    else Time > 0
+        Logic->>DB: update_game_time(new_times, now)
+        Logic-->>Server: MOVE_ACK (success, new_times)
+    end
+    deactivate Logic
+    
+    Server-->>UI_Game: MOVE_ACK (Sync clocks)
+    UI_Game->>UI_Game: Update Labels from Server Time
