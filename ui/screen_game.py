@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from chess_board import ChessBoard
 from protocol_constants import MessageType, ResponseCode, PayloadFields
+import time
 
 
 class GameScreen:
@@ -282,10 +283,9 @@ class GameScreen:
             
         self.white_time_left = self.time_control_seconds
         self.black_time_left = self.time_control_seconds
-        self.last_move_time = None # Timer starts on first move usually, or game start? 
-        # Server logic usually starts timer on game creation or first move. 
-        # Let's assume game start for simplicity or sync with server.
-        # Actually logic_wrapper uses 'last_move_time' from DB.
+        # Timer starts immediately on game start (matching server logic)
+        self.last_move_time = time.time()
+
         
         self.player_time_label.config(text=time_str)
         self.opponent_time_label.config(text=time_str)
