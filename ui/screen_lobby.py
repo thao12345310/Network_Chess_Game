@@ -253,6 +253,7 @@ class LobbyScreen:
             self.log("Refreshing players list...")
         else:
             print("DEBUG: Client not connected!")
+            self.log("⚠ Not connected to server")
     
     def filter_players(self, event=None):
         """Filter players by search"""
@@ -279,6 +280,11 @@ class LobbyScreen:
     
     def send_challenge(self):
         """Send challenge to selected player"""
+        # Check connection first
+        if not self.client.connected:
+            messagebox.showerror("Connection Lost", "Cannot send challenge - not connected to server")
+            return
+        
         selection = self.players_listbox.curselection()
         if not selection:
             messagebox.showinfo("Info", "Please select a player")
@@ -300,6 +306,11 @@ class LobbyScreen:
     
     def do_random_match(self):
         """Find random opponent with cancel and timeout support"""
+        # Check connection first
+        if not self.client.connected:
+            messagebox.showerror("Connection Lost", "Cannot find match - not connected to server")
+            return
+        
         if self.is_searching:
             return
         

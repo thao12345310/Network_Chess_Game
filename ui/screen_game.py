@@ -240,6 +240,14 @@ class GameScreen:
         # NOTE: DO NOT register MATCH_START here - it will override Lobby's callback
         # MATCH_START for rematch is registered dynamically when needed
     
+    def check_connection(self):
+        """Check if still connected to server"""
+        if not self.is_practice_mode and not self.client.connected:
+            # Connection lost during game
+            self.is_game_active = False
+            return False
+        return True
+    
     def start_game(self, game_id, opponent, your_color, opponent_elo, player_elo, time_control="10+0", is_rematch=False, custom_fen=None):
         """Initialize game with data"""
         print(f"DEBUG: start_game called. Game: {game_id}, Me: {self.client.username}, Color: '{your_color}', TC: {time_control}, Rematch: {is_rematch}, Custom FEN: {custom_fen}")
@@ -486,6 +494,11 @@ class GameScreen:
                     print(f"DEBUG: Practice mode move: {from_pos} -> {to_pos}")
                 # Normal online mode
                 elif self.client.connected and self.game_id:
+                    # Check connection before sending move
+                    if not self.check_connection():
+                        messagebox.showerror("Connection Lost", "Cannot send move - disconnected from server")
+                        return
+                    
                     self.client.make_move(self.game_id, from_pos, to_pos)
                 
                     # Clear selection immediately to prevent double submissions
@@ -676,6 +689,10 @@ class GameScreen:
         """Check if anyone has timed out"""
         if not self.is_game_active:
             return
+        
+        # Check connection first
+        if not self.check_connection():
+            return  # Connection lost, stop checking
             
         if self.last_move_time is None:
              # Timer hasn't started yet (waiting for first move)

@@ -263,6 +263,18 @@ void GameClient::receiveLoop()
 {
     while (running)
     {
+        if (!netClient->isConnected())
+        {
+            // Connection lost - trigger error callback
+            std::cerr << "Connection lost in receive loop" << std::endl;
+            if (onError)
+            {
+                onError("Connection to server lost");
+            }
+            running = false;
+            break;
+        }
+
         Json::Value msg = netClient->receiveMessage();
 
         if (!msg.isNull())
@@ -274,6 +286,16 @@ void GameClient::receiveLoop()
 
             // Process with callbacks immediately
             processMessage(msg);
+        }
+        else if (!netClient->isConnected())
+        {
+            // Empty message and not connected = disconnect
+            if (onError)
+            {
+                onError("Server closed connection");
+            }
+            running = false;
+            break;
         }
 
         // Small sleep to prevent busy waiting

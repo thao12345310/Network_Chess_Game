@@ -5,6 +5,7 @@ Main Application - Screen Manager
 """
 
 import tkinter as tk
+from tkinter import messagebox
 from network_client import ChessClient
 from screen_splash import SplashScreen
 from screen_login import LoginScreen
@@ -33,6 +34,7 @@ class ChessApp:
         
         # Network client
         self.client = ChessClient(host=host, port=port)
+        self.client.set_disconnect_callback(self.on_server_disconnect)
         
         # Appearance settings (shared across screens)
         self.appearance_settings = AppearanceSettings()
@@ -127,9 +129,13 @@ class ChessApp:
     
     def show_screen(self, screen_name):
         """Switch to a screen"""
-        # Hide current screen
-        if self.current_screen:
-            self.current_screen.hide()
+        # Hide ALL screens first to prevent overlap
+        for screen in self.screens.values():
+            if screen:
+                try:
+                    screen.hide()
+                except:
+                    pass
         
         # Show new screen
         if screen_name in self.screens:
@@ -221,6 +227,38 @@ class ChessApp:
         self.player_id = None
         # Show login screen
         self.show_screen('login')
+    
+    def on_server_disconnect(self, reason="Connection lost"):
+        """Handle server disconnect - show error and return to login"""
+        def handle_disconnect():
+            # Hide ALL screens to prevent overlap
+            for screen in self.screens.values():
+                if screen:
+                    try:
+                        screen.hide()
+                    except:
+                        pass
+            
+            # Show error message
+            messagebox.showerror(
+                "Connection Lost",
+                f"{reason}\n\nYou have been disconnected from the server.\nPlease login again."
+            )
+            
+            # Reset state
+            self.player_elo = 1200
+            self.player_id = None
+            self.current_screen = None
+            
+            # Show login screen
+            if 'login' in self.screens:
+                self.show_screen('login')
+            else:
+                # If login screen not initialized yet, reinitialize
+                self.init_screens()
+        
+        # Schedule on main thread
+        self.root.after(0, handle_disconnect)
     
     def run(self):
         """Run the application"""

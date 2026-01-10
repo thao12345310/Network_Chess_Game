@@ -26,6 +26,9 @@ class ChessClient:
         self.connected = False
         self.username = None
         self.callbacks = {}
+        self._disconnect_callback = None
+        self._health_check_running = False
+        self._health_check_thread = None
         
         # Load shared library
         lib_path = Path(__file__).parent / LIB_NAME
@@ -145,6 +148,8 @@ class ChessClient:
             # Connect
             result = self.lib.client_connect(self.handle)
             self.connected = (result == 1)
+            if self.connected:
+                self._start_health_check()  # Start health monitoring
             return self.connected
         except Exception as e:
             print(f"Connection error: {e}")
@@ -152,11 +157,50 @@ class ChessClient:
     
     def disconnect(self):
         """Disconnect from server"""
+        self._stop_health_check()
         if self.handle:
             self.lib.client_disconnect(self.handle)
             self.lib.client_destroy(self.handle)
             self.handle = None
         self.connected = False
+        
+    def set_disconnect_callback(self, callback):
+        """Set callback to be called when connection is lost"""
+        self._disconnect_callback = callback
+        
+    def _trigger_disconnect(self, reason="Connection lost"):
+        """Internal method to trigger disconnect callback"""
+        self.connected = False
+        self._stop_health_check()
+        if self._disconnect_callback:
+            try:
+                self._disconnect_callback(reason)
+            except Exception as e:
+                print(f"Error in disconnect callback: {e}")
+    
+    def _start_health_check(self):
+        """Start background thread to check connection health"""
+        if self._health_check_running:
+            return
+        
+        self._health_check_running = True
+        self._health_check_thread = threading.Thread(target=self._health_check_loop, daemon=True)
+        self._health_check_thread.start()
+    
+    def _stop_health_check(self):
+        """Stop health check thread"""
+        self._health_check_running = False
+        if self._health_check_thread:
+            self._health_check_thread = None
+    
+    def _health_check_loop(self):
+        """Background loop to check if connection is still alive"""
+        import time
+        while self._health_check_running and self.connected:
+            time.sleep(5)  # Check every 5 seconds
+            if not self.connected:
+                self._trigger_disconnect("Connection lost")
+                break
     
     def _setup_callbacks(self):
         """Setup C++ callbacks"""
@@ -246,6 +290,11 @@ class ChessClient:
         """Handle error from C++"""
         try:
             error_str = error_msg.decode('utf-8')
+            
+            # Check if this is a connection error
+            if any(keyword in error_str.lower() for keyword in ['connection', 'disconnect', 'closed', 'socket']):
+                self._trigger_disconnect(f"Server error: {error_str}")
+            
             if MessageType.ERROR in self.callbacks:
                 self.callbacks[MessageType.ERROR]({'error': error_str})
             print(f"C++ Client Error: {error_str}")

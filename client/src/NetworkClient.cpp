@@ -119,6 +119,12 @@ bool NetworkClient::sendMessage(const Json::Value &message)
 
 bool NetworkClient::sendRaw(const std::string &data)
 {
+    if (!connected)
+    {
+        std::cerr << "Cannot send - not connected" << std::endl;
+        return false;
+    }
+
     size_t totalSent = 0;
     size_t dataLen = data.length();
 
@@ -130,6 +136,13 @@ bool NetworkClient::sendRaw(const std::string &data)
         if (sent < 0)
         {
             std::cerr << "Send failed: " << strerror(errno) << std::endl;
+            connected = false;
+            return false;
+        }
+        else if (sent == 0)
+        {
+            // Connection closed
+            std::cerr << "Connection closed during send" << std::endl;
             connected = false;
             return false;
         }
